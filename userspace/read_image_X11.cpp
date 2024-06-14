@@ -165,8 +165,10 @@ int processimage( struct shmimage * src, struct shmimage * dst )
     return true ;
 }
 
-int run( Display * dsp, Window window, struct shmimage * src, struct shmimage * dst )
+XImage * * run( Display * dsp, Window window, struct shmimage * src, struct shmimage * dst )
 {
+    XImage * [60] results = new XImage * [60];
+    // collect an array of 60 images
     XGCValues xgcvalues ;
     xgcvalues.graphics_exposures = False ;
     GC gc = XCreateGC( dsp, window, GCGraphicsExposures, &xgcvalues ) ;
@@ -181,6 +183,7 @@ int run( Display * dsp, Window window, struct shmimage * src, struct shmimage * 
     int dstheight = dst->ximage->height ;
     long framets = timestamp( );
     long periodts = timestamp( ) ;
+    int results_idx = 0;
 
     std::cout << framets << " " << periodts << std::endl;
 
@@ -211,11 +214,20 @@ int run( Display * dsp, Window window, struct shmimage * src, struct shmimage * 
         if( initialized )
         {
             getrootwindow( dsp, src ) ;
+
             std::cout << "processImage call" << std::endl;
             if( !processimage( src, dst ) )
             {
-                return false ;
+                return nullptr ;
             }
+
+            //Also put ximage in the result array
+            results[results_idx] = dst->ximage;
+            results_idx++;
+            if (results_idx > 59) {
+                return results;
+            }
+
             XShmPutImage( dsp, window, gc, dst->ximage,
                           0, 0, 0, 0, dstwidth, dstheight, False ) ;
             XSync( dsp, False ) ;
@@ -241,7 +253,7 @@ int run( Display * dsp, Window window, struct shmimage * src, struct shmimage * 
             }
         }
     }
-    return true ;
+    return nullptr ;
 }
 
 
@@ -380,13 +392,13 @@ XImage* read_image_from_xserver(bool debug) {
     }
 
     Window window = createwindow( dsp, dstwidth, dstheight ) ;
-    run( dsp, window, &src, &dst ) ;
+    XImage * res = run( dsp, window, &src, &dst ) ;
     destroywindow( dsp, window ) ;
 
     destroyimage( dsp, &src ) ;
     destroyimage( dsp, &dst ) ;
     XCloseDisplay( dsp ) ;
-    return nullptr;
+    return res;
 
 }
 

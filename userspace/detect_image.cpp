@@ -10,6 +10,7 @@
 #include <opencv2/core/hal/intrin.hpp>
 
 #include <chrono>
+#include <X11/Xlib.h>
 
 #include "utils.h"
 
@@ -222,18 +223,9 @@ void* checkLumColThresh(void* arg) {
 /* ./baseline -f filename [-letterbox -crop] */
 /* ./adaptive -f filename [-letterbox -crop] [-h xx -w xx -size xx -d xx] */
 // TODO: batch process
-int detect_epileptic_image(int argc, char ** argv) {
+int detect_epileptic_image(XImage ** images) {
 
     /* Parse command line arguments */
-    const std::vector<std::string_view> args(argv, argv + argc);
-    
-    /* Parse filename */
-    const string filename = has_option(args, "-f")? get_option(args, "-f").data() : "";
-    if (filename == ""){
-        cout << "No file provided (Use the -f option)" << endl;
-        return -1;
-    }
-
     int screenSize, viewingDistance;
 
 #ifdef BASELINE
@@ -263,35 +255,11 @@ int detect_epileptic_image(int argc, char ** argv) {
     gammaLUT = readBinaryFile("inverseGammaLUT.bin");
 
     bool useLetterbox = false, useCrop = false;
-    if (has_option(args, "-letterbox") && has_option(args, "-crop")){
-        cout << "Multiple resize mode, choose either -letterbox or -crop" << endl;
-        return -1;
-    }
-    else if (has_option(args, "-letterbox")){
-        cout << "Resize and letterboxing" << endl;
-        useLetterbox = true;
-    }
-    else if (has_option(args, "-crop")){
-        cout << "Resize and cropping" << endl;
-        useCrop = true;
-    }
-    else{
-        cout << "Provide a resize mode" << endl;
-        return -1;
-    }
-      
     auto start = high_resolution_clock::now();
 
     // /* Frame struct initilization */
     f[0] = Frame(resolution_h, resolution_w);
     f[1] = Frame(resolution_h, resolution_w);
-
-    /* open video file */
-    VideoCapture cap(filename);
-    if (!cap.isOpened()){
-        cout << "Error opening video stream or file" << endl;
-        return -1;
-    }
 
     /* get FPS */
     const int fps = cap.get(CAP_PROP_FPS);

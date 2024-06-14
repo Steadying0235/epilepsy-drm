@@ -7,12 +7,17 @@ void run() {
 
 
     // read image
-    read_image_from_xserver(true);
+    XImage ** image = read_image_from_xserver(true);
+
+    std::cout << "Got image from Xserver" << std::endl;
+//
+//    std::cout << image->height << " x " << image->width << " \n\n" << image->data << std::endl;
+
 
     // detect image
     char ** placeholder_argc = new char *[1];
     placeholder_argc[0] = "hello.cpp";
-    detect_epileptic_image(1, placeholder_argc);
+    detect_epileptic_image(image);
     // block the flow
 
 

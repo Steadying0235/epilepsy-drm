@@ -33,6 +33,6 @@
 #endif
 
 
-XImage* read_image_from_xserver(bool debug);
+XImage* * read_image_from_xserver(bool debug);
 
 void is_read_image_X11_alive();
