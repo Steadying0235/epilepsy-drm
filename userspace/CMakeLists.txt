@@ -51,6 +51,10 @@ target_link_libraries(userspace png)
 # Link OpenGL
 target_link_libraries(userspace GL)
 
+# Copy inverseGammaLUT.bin to the build directory
+configure_file(support/inverseGammaLUT.bin ${CMAKE_CURRENT_BINARY_DIR}/inverseGammaLUT.bin COPYONLY)
+
+
 # Link against your custom compiled OpenCV libraries
 #link_directories(${OpenCV_DIR}/lib)
 

@@ -112,6 +112,11 @@ void* calcLumColor(void* arg) {
 
             Vec3f &pixel = pixelRow[j];
 
+
+            //cout << pixel[0] << endl;
+            //cout << pixel[2] << endl;
+            //cout << pixel[1] << endl;
+
             /* Inverse Gamma Correction */
             float r = inverseGammaFast(pixel[2]);
             float g = inverseGammaFast(pixel[1]);
@@ -232,8 +237,8 @@ int detect_epileptic_image(std::vector<std::vector<unsigned int>> images) {
 #ifdef BASELINE
     /* Parse resolution, screen size and viewing distance */
     cout << "Using baseline mode" << endl;
-    resolution_h = 768;
-    resolution_w = 1024;
+    resolution_h = 540;
+    resolution_w = 960;
 
     const int rows = 540; // Example rows and cols
     const int cols = 960;
@@ -263,19 +268,6 @@ int detect_epileptic_image(std::vector<std::vector<unsigned int>> images) {
     // viewingDistance = 23;
     const int minSafeArea = 21824; // 341*256*0.25
 #endif
-#ifdef ADAPTIVE
-    cout << "Using adaptive mode" << endl;
-    if (!has_option(args, "-h") || !has_option(args, "-w") || !has_option(args, "-size") || !has_option(args, "-d")){
-        cout << "Missing arguments for adaptive mode" << endl;
-        return -1;
-    }
-    resolution_h = atoi(get_option(args, "-h").data());
-    resolution_w = atoi(get_option(args, "-w").data());
-    screenSize = atoi(get_option(args, "-size").data());
-    viewingDistance = atoi(get_option(args, "-d").data());
-    const double pixelDensity = pixelDensity(resolution_w, resolution_h, screenSize);
-    const int minSafeArea = minSafeArea(viewingDistance, pixelDensity); 
-#endif
 
     /* Prepare inverse gamma lookup table */
     gammaLUT = readBinaryFile("inverseGammaLUT.bin");
@@ -283,172 +275,171 @@ int detect_epileptic_image(std::vector<std::vector<unsigned int>> images) {
     bool useLetterbox = false, useCrop = false;
     auto start = high_resolution_clock::now();
 
+    std::vector<cv::Mat> frames;
 
-    // Example unsigned int* array (replace with your actual data)
-    std::vector<unsigned int> myUnsignedIntArray = images[0];
+    for (int i=0;i<15;i++) {
 
-    // Calculate the number of pixels
-    int numPixels = myUnsignedIntArray.size();
+        // Example unsigned int* array (replace with your actual data)
+        std::vector<unsigned int> myUnsignedIntArray = images[i];
 
-    // Determine the number of channels (assuming RGB here)
-    int numChannels = 3;  // RGB has 3 channels
+        // Calculate the number of pixels
+        int numPixels = myUnsignedIntArray.size();
 
-    // Create a Mat object of appropriate size and type
-    cv::Mat image(rows, cols, CV_8UC3);  // CV_8UC3 for 8-bit unsigned integer channels (RGB)
+        // Determine the number of channels (assuming RGB here)
+        int numChannels = 3;  // RGB has 3 channels
 
-    int pixelIndex = 0;
-    for (int row = 0; row < rows; ++row) {
-        for (int col = 0; col < cols; ++col) {
-            if (pixelIndex < numPixels) {
-                unsigned int pixelValue = myUnsignedIntArray[pixelIndex];
-                uchar blue = pixelValue & 0xFF;
-                uchar green = (pixelValue >> 8) & 0xFF;
-                uchar red = (pixelValue >> 16) & 0xFF;
+        // Create a Mat object of appropriate size and type
+        cv::Mat image(rows, cols, CV_8UC3);  // CV_8UC3 for 8-bit unsigned integer channels (RGB)
 
-                // Set pixel value in the Mat
-                image.at<cv::Vec3b>(row, col) = cv::Vec3b(blue, green, red);
+        int pixelIndex = 0;
+        for (int row = 0; row < rows; ++row) {
+            for (int col = 0; col < cols; ++col) {
+                if (pixelIndex < numPixels) {
+                    unsigned int pixelValue = myUnsignedIntArray[pixelIndex];
+                    uchar blue = pixelValue & 0xFF;
+                    uchar green = (pixelValue >> 8) & 0xFF;
+                    uchar red = (pixelValue >> 16) & 0xFF;
 
-                pixelIndex++;
-            } else {
-                // Handle case where numPixels is smaller than rows * cols
-                // This is optional depending on your logic
-                break;
+                    // Set pixel value in the Mat
+                    image.at<cv::Vec3b>(row, col) = cv::Vec3b(blue, green, red);
+
+                    pixelIndex++;
+                } else {
+                    // Handle case where numPixels is smaller than rows * cols
+                    // This is optional depending on your logic
+                    break;
+                }
             }
         }
+
+
+        // add processed mat to vector
+        frames.push_back(image);
+
+        // Debug: dump feed to files to confirm integrity
+        char filename_fstring [15];
+        sprintf(filename_fstring, "test_%d.png", i);
+        // Display the image (optional)
+        cv::imwrite(filename_fstring, image);
+
     }
-
-
-    // Display the image (optional)
-    cv::imwrite("test.png", image);
 
     // /* Frame struct initilization */
     f[0] = Frame(resolution_h, resolution_w);
     f[1] = Frame(resolution_h, resolution_w);
 
     /* get FPS */
+    int fps = 30;
 
-//    const int fps = cap.get(CAP_PROP_FPS);
-//
-//    int freqLum = 0, freqCol = 0;
-//
-//    queue<Frame> oneSecFrames;
-//
-//    bool hasFlash = false, hasRed = false;
-//    pthread_t threads[NTHREADS];
-//    ThreadData threadData[NTHREADS];
-//    int indexArray[NTHREADS];
-//
-//    int frameCount = 0;
-//    /* Main loop */
-//    while (cap.read(frame)) {
-//
-//        frameCount++;
-//
-//        /* Adjust resloution of video using bicubic interpolation*/
-//        /* Aspect ratio is kept, letterboxing or cropping used */
-//        frame = resizeVideo(frame, resolution_w, resolution_h, useCrop, useLetterbox);
-//
-//        frame.convertTo(frame, CV_32FC3);
-//
-//        /* Multi-threaded luminance and color calculation */
-//        for (int i = 0; i < NTHREADS; i++){
-//            threadData[i].index = i;
-//            if (pthread_create(&threads[i], nullptr, &calcLumColor, &threadData[i]) != 0){
-//                perror("Failed to create thread");
-//            }
-//        }
-//        for (int i = 0; i < NTHREADS; i++){
-//            if (pthread_join(threads[i], nullptr) != 0) {
-//                perror("Failed to join thread");
-//            }
-//        }
-//
-//        /* Multi-threaded harmful luminance and color differences check */
-//        for (int i = 0; i < NTHREADS; i++){
-//            threadData[i].index = i;
-//            if (pthread_create(&threads[i], nullptr, &checkLumColThresh, &threadData[i]) != 0){
-//                perror("Failed to create thread");
-//            }
-//        }
-//
-//        for (int i = 0; i < NTHREADS; i++){
-//            if (pthread_join(threads[i], nullptr) != 0) {
-//                perror("Failed to join thread");
-//            }
-//        }
-//
-//#ifdef BASELINE
-//        for (int i = 0; i < NTHREADS; i++){
-//            f[1].harmfulLumIncCount += threadData[i].countIncLum;
-//            f[1].harmfulColIncCount += threadData[i].countIncCol;
-//            f[1].harmfulLumDecCount += threadData[i].countDecLum;
-//            f[1].harmfulColDecCount += threadData[i].countDecCol;
-//        }
-//
-//        /* Check area threshold && Update total number of harmful flashes */
-//        if ((f[1].harmfulLumIncCount > minSafeArea) || (f[1].harmfulLumDecCount > minSafeArea)) freqLum++;
-//        if ((f[1].harmfulColIncCount > minSafeArea) || (f[1].harmfulColDecCount > minSafeArea)) freqCol++;
-//
-//        /* Sliding window keeps only one-second worth of frames */
-//        oneSecFrames.push(f[1]);
-//
-//        if (oneSecFrames.size() > fps){
-//            if ((oneSecFrames.front().harmfulLumIncCount > minSafeArea) || (oneSecFrames.front().harmfulLumDecCount > minSafeArea)) freqLum--;
-//            if ((oneSecFrames.front().harmfulColIncCount > minSafeArea) || (oneSecFrames.front().harmfulColDecCount > minSafeArea)) freqCol--;
-//            oneSecFrames.pop();
-//        }
-//
-//         /* Check frequency threshold */
-//        if (freqLum/2 > 3) hasFlash = true;
-//        if (freqCol/2 > 3) hasRed = true;
-//
-//#endif
-//#ifdef ADAPTIVE
-//        for (int i = 0; i < NTHREADS; i++){
-//            f[1].harmfulLumCount += threadData[i].countLum;
-//            f[1].harmfulColCount += threadData[i].countCol;
-//        }
-//
-//        /* Check area threshold && Update total number of harmful trnasitions */
-//        if (f[1].harmfulLumCount > minSafeArea) freqLum++;
-//        if (f[1].harmfulColCount > minSafeArea) freqCol++;
-//
-//        /* Sliding window keeps only one-second worth of frames */
-//        oneSecFrames.push(f[1]);
-//
-//        if (oneSecFrames.size() > fps){
-//            if (oneSecFrames.front().harmfulLumCount > minSafeArea) freqLum--;
-//            if (oneSecFrames.front().harmfulColCount > minSafeArea) freqCol--;
-//            oneSecFrames.pop();
-//        }
-//
-//        printf("%d %d %d\n", frameCount, freqLum, f[1].harmfulLumCount);
-//
-//        /* Check frequency threshold */
-//        if (freqLum > 6) hasFlash = true;
-//        if (freqCol > 6) hasRed = true;
-//#endif
-//
-//        if(hasFlash and hasRed){
-//            break;
-//        }
-//
-//        /* Shift frames by 1 */
-//        swap(f[0], f[1]);
-//        f[1] = Frame(resolution_h, resolution_w);
-//    }
-//
-//
-//    cout << "hasFlash " << hasFlash << endl;
-//    cout << "hasRed " << hasRed << endl;
-//
-//    auto stop = high_resolution_clock::now();
-//    auto duration = duration_cast<seconds>(stop - start);
-//
-//    // FILE* outfile;
-//    // outfile = fopen("baseline_simulated.csv", "a");
-//    // fprintf(outfile, "%s,%d,%d,%d,%ld\n", basename(argv[2]), hasFlash, hasRed, hasFlash || hasRed, duration.count());
-//    // fclose(outfile);
+
+    //const int fps = cap.get(CAP_PROP_FPS);
+
+    int freqLum = 0, freqCol = 0;
+
+    queue<Frame> oneSecFrames;
+
+    bool hasFlash = false, hasRed = false;
+    pthread_t threads[NTHREADS];
+    ThreadData threadData[NTHREADS];
+    int indexArray[NTHREADS];
+
+    int frameCount = 0;
+
+    bool not_end_of_buffer = true;
+
+    /* Main loop */
+    while (not_end_of_buffer) {
+        frameCount++;
+
+        if (frameCount + 1 == frames.size()) {
+            not_end_of_buffer = false;
+            break;
+        }
+
+        // set frame to be the next frame in the buffer
+        frame = frames[frameCount];
+
+        /* Adjust resloution of video using bicubic interpolation*/
+        /* Aspect ratio is kept, letterboxing or cropping used */
+        frame = resizeVideo(frame, resolution_w, resolution_h, useCrop, useLetterbox);
+
+        frame.convertTo(frame, CV_32FC3);
+
+        /* Multi-threaded luminance and color calculation */
+        for (int i = 0; i < NTHREADS; i++){
+            threadData[i].index = i;
+            if (pthread_create(&threads[i], nullptr, &calcLumColor, &threadData[i]) != 0){
+                perror("Failed to create thread");
+            }
+        }
+        for (int i = 0; i < NTHREADS; i++){
+            if (pthread_join(threads[i], nullptr) != 0) {
+                perror("Failed to join thread");
+            }
+        }
+
+        /* Multi-threaded harmful luminance and color differences check */
+        for (int i = 0; i < NTHREADS; i++){
+            threadData[i].index = i;
+            if (pthread_create(&threads[i], nullptr, &checkLumColThresh, &threadData[i]) != 0){
+                perror("Failed to create thread");
+            }
+        }
+
+        for (int i = 0; i < NTHREADS; i++){
+            if (pthread_join(threads[i], nullptr) != 0) {
+                perror("Failed to join thread");
+            }
+        }
+
+#ifdef BASELINE
+        for (int i = 0; i < NTHREADS; i++){
+            f[1].harmfulLumIncCount += threadData[i].countIncLum;
+            f[1].harmfulColIncCount += threadData[i].countIncCol;
+            f[1].harmfulLumDecCount += threadData[i].countDecLum;
+            f[1].harmfulColDecCount += threadData[i].countDecCol;
+        }
+
+        /* Check area threshold && Update total number of harmful flashes */
+        if ((f[1].harmfulLumIncCount > minSafeArea) || (f[1].harmfulLumDecCount > minSafeArea)) freqLum++;
+        if ((f[1].harmfulColIncCount > minSafeArea) || (f[1].harmfulColDecCount > minSafeArea)) freqCol++;
+
+        /* Sliding window keeps only one-second worth of frames */
+        oneSecFrames.push(f[1]);
+
+        if (oneSecFrames.size() > fps){
+            if ((oneSecFrames.front().harmfulLumIncCount > minSafeArea) || (oneSecFrames.front().harmfulLumDecCount > minSafeArea)) freqLum--;
+            if ((oneSecFrames.front().harmfulColIncCount > minSafeArea) || (oneSecFrames.front().harmfulColDecCount > minSafeArea)) freqCol--;
+            oneSecFrames.pop();
+        }
+
+         /* Check frequency threshold */
+        if (freqLum/2 > 3) hasFlash = true;
+        if (freqCol/2 > 3) hasRed = true;
+
+#endif
+
+
+        if(hasFlash and hasRed){
+            break;
+        }
+
+        /* Shift frames by 1 */
+        swap(f[0], f[1]);
+        f[1] = Frame(resolution_h, resolution_w);
+    }
+
+
+    cout << "hasFlash " << hasFlash << endl;
+    cout << "hasRed " << hasRed << endl;
+
+    auto stop = high_resolution_clock::now();
+    auto duration = duration_cast<seconds>(stop - start);
+
+    // FILE* outfile;
+    // outfile = fopen("baseline_simulated.csv", "a");
+    // fprintf(outfile, "%s,%d,%d,%d,%ld\n", basename(argv[2]), hasFlash, hasRed, hasFlash || hasRed, duration.count());
+    // fclose(outfile);
 //
     return 0;
 }
