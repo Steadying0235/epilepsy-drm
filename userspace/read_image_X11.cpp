@@ -4,7 +4,9 @@
 
 
 //#!cc -Werror -std=c99 -I/usr/include/libdrm -ldrm enum.c -o enum && ./enum /dev/dri/card0
+#include <vector>
 #include "read_image_X11.h"
+#include <string.h>
 
 // comment the next line to busy-wait at each frame
 //#define __SLEEP__
@@ -14,12 +16,7 @@
 #define NAMESP "         "
 #define BPP    4
 
-struct shmimage
-{
-    XShmSegmentInfo shminfo ;
-    XImage * ximage ;
-    unsigned int * data ; // will point to the image's BGRA packed pixels
-};
+
 
 void initimage( struct shmimage * image )
 {
@@ -129,12 +126,15 @@ unsigned int getpixel( struct shmimage * src, struct shmimage * dst,
     return src->data[ y * src->ximage->width + x ] ;
 }
 
-int processimage( struct shmimage * src, struct shmimage * dst )
+unsigned int * processimage( struct shmimage * src, struct shmimage * dst )
 {
     int sw = src->ximage->width ;
     int sh = src->ximage->height ;
     int dw = dst->ximage->width ;
     int dh = dst->ximage->height ;
+
+    std::cout << "src: " << sw << " x " << sh << std::endl;
+    std::cout << "dst: " << dw << " x " << dh << std::endl;
 
     // Here you can set the resulting position and size of the captured screen
     // Because of the limitations of this example, it must fit in dst->ximage
@@ -148,7 +148,7 @@ int processimage( struct shmimage * src, struct shmimage * dst )
     {
         printf( NAME   ": This is only a limited example\n" ) ;
         printf( NAMESP "  Please implement a complete scaling algorithm\n" ) ;
-        return false ;
+        throw false ;
     }
 
     unsigned int * d = dst->data + y * dw + x ;
@@ -162,12 +162,17 @@ int processimage( struct shmimage * src, struct shmimage * dst )
         }
         d += r ;
     }
-    return true ;
+    return d ;
 }
 
-XImage * * run( Display * dsp, Window window, struct shmimage * src, struct shmimage * dst )
+
+std::vector<unsigned  int *> run( Display * dsp, Window window, struct shmimage * src, struct shmimage * dst )
 {
-    XImage * [60] results = new XImage * [60];
+    std::vector<shmimage *> results;
+    std::vector<unsigned int *> results_raw;
+    results.resize(30);
+    results_raw.resize(30);
+
     // collect an array of 60 images
     XGCValues xgcvalues ;
     xgcvalues.graphics_exposures = False ;
@@ -215,17 +220,31 @@ XImage * * run( Display * dsp, Window window, struct shmimage * src, struct shmi
         {
             getrootwindow( dsp, src ) ;
 
-            std::cout << "processImage call" << std::endl;
-            if( !processimage( src, dst ) )
-            {
-                return nullptr ;
-            }
+
+            unsigned int* image_buf = processimage( src, dst );
+
+//            std::cout << dst->ximage->width << " x " << dst->ximage->height << std::endl;
+            // deep copy of dst
+//            shmimage * dst_cpy = dst;
+//            dst_cpy->data = new unsigned int[dstwidth * dstheight];
+//            dst_cpy->ximage = new XImage(dst->ximage);
+//            memcpy(dst_cpy->data, dst->data, dstwidth * dstheight * sizeof(unsigned int));
+//
+//            dst_cpy->shminfo = dst->shminfo;
+//
+//            dst_cpy->ximage->data = (char *)dst_cpy->data;
+//            dst_cpy->ximage->width = dstwidth;
+//            dst_cpy->ximage->height = dstheight;
+
+
+
 
             //Also put ximage in the result array
-            results[results_idx] = dst->ximage;
+            results[results_idx] = dst;
+            results_raw[results_idx] = image_buf;
             results_idx++;
-            if (results_idx > 59) {
-                return results;
+            if (results_idx > 29) {
+                return results_raw;
             }
 
             XShmPutImage( dsp, window, gc, dst->ximage,
@@ -253,7 +272,7 @@ XImage * * run( Display * dsp, Window window, struct shmimage * src, struct shmi
             }
         }
     }
-    return nullptr ;
+    return std::vector<unsigned  int *>() ;
 }
 
 
@@ -323,7 +342,7 @@ struct display_nfo initialize_xserver(bool debug, Display * &dsp, struct shmimag
 
 
 //Main entrypoint to read image
-XImage* read_image_from_xserver(bool debug) {
+std::vector<unsigned int *> read_image_from_xserver(bool debug) {
 //    Display * dsp;
 //    struct shmimage src, dst ;
 //    display_nfo d_nfo = initialize_xserver(true, dsp, src, dst);
@@ -392,7 +411,7 @@ XImage* read_image_from_xserver(bool debug) {
     }
 
     Window window = createwindow( dsp, dstwidth, dstheight ) ;
-    XImage * res = run( dsp, window, &src, &dst ) ;
+    std::vector<unsigned  int *> res = run( dsp, window, &src, &dst ) ;
     destroywindow( dsp, window ) ;
 
     destroyimage( dsp, &src ) ;

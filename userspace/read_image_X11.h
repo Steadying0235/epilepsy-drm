@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <vector>
 
 #include <X11/Xlib.h>
 #include <EGL/egl.h>
@@ -32,7 +33,13 @@
 #include <sys/time.h>
 #endif
 
+struct shmimage
+{
+    XShmSegmentInfo shminfo ;
+    XImage * ximage ;
+    unsigned int * data ; // will point to the image's BGRA packed pixels
+};
 
-XImage* * read_image_from_xserver(bool debug);
+std::vector<unsigned int *>  read_image_from_xserver(bool debug);
 
 void is_read_image_X11_alive();

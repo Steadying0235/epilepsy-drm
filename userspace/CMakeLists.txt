@@ -45,6 +45,12 @@ target_link_libraries(userspace ${OpenCV_LIBS})
 # Link against libX11 and libEGL
 target_link_libraries(userspace X11 Xext m ${EGL_LIBRARY})
 
+# Link against libpng
+target_link_libraries(userspace png)
+
+# Link OpenGL
+target_link_libraries(userspace GL)
+
 # Link against your custom compiled OpenCV libraries
 #link_directories(${OpenCV_DIR}/lib)
 
