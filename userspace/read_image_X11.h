@@ -40,6 +40,6 @@ struct shmimage
     unsigned int * data ; // will point to the image's BGRA packed pixels
 };
 
-std::vector<unsigned int *>  read_image_from_xserver(bool debug);
+std::vector<std::vector<unsigned int>>  read_image_from_xserver(bool debug);
 
 void is_read_image_X11_alive();

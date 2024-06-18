@@ -126,7 +126,7 @@ unsigned int getpixel( struct shmimage * src, struct shmimage * dst,
     return src->data[ y * src->ximage->width + x ] ;
 }
 
-unsigned int * processimage( struct shmimage * src, struct shmimage * dst )
+std::vector<unsigned int> processimage( struct shmimage * src, struct shmimage * dst )
 {
     int sw = src->ximage->width ;
     int sh = src->ximage->height ;
@@ -138,8 +138,8 @@ unsigned int * processimage( struct shmimage * src, struct shmimage * dst )
 
     // Here you can set the resulting position and size of the captured screen
     // Because of the limitations of this example, it must fit in dst->ximage
-    int w = dw / 2 ;
-    int h = dh / 2 ;
+    int w = dw  ;
+    int h = dh  ;
     int x = ( dw - w ) ;
     int y = ( dh - h ) / 2 ;
 
@@ -151,25 +151,38 @@ unsigned int * processimage( struct shmimage * src, struct shmimage * dst )
         throw false ;
     }
 
-    unsigned int * d = dst->data + y * dw + x ;
+    unsigned int * d = dst->data + y * dw + x ; // old code
+//    unsigned int* d = new unsigned int[w * h]; // Allocate memory for d
+    std::cout << "Length of array: " << w*h << std::endl;
+    std::vector<unsigned int> d_vect;
+    d_vect.resize(w*h);
+
+//    d += y * dw + x;
+    // Calculate the index in the newly allocated memory similar to dst->data + y * dw + x
+//    unsigned int* d_ptr = d + y * dw + x;
+
+    //unsigned int* d_ptr = d;
+
+
     int r = dw - w ;
     int j, i ;
     for( j = 0 ; j < h ; ++j )
     {
         for( i = 0 ; i < w ; ++i )
         {
-            *d++ = 1.0 * getpixel( src, dst, j, i, w, h ) ;
+            *d++ = getpixel( src, dst, j, i, w, h ) ;
+            d_vect[j*w + i] = *(d - 1);
         }
         d += r ;
     }
-    return d ;
+    return d_vect ;
 }
 
 
-std::vector<unsigned  int *> run( Display * dsp, Window window, struct shmimage * src, struct shmimage * dst )
+std::vector<std::vector<unsigned int>> run( Display * dsp, Window window, struct shmimage * src, struct shmimage * dst )
 {
     std::vector<shmimage *> results;
-    std::vector<unsigned int *> results_raw;
+    std::vector<std::vector<unsigned int>> results_raw;
     results.resize(30);
     results_raw.resize(30);
 
@@ -221,7 +234,7 @@ std::vector<unsigned  int *> run( Display * dsp, Window window, struct shmimage 
             getrootwindow( dsp, src ) ;
 
 
-            unsigned int* image_buf = processimage( src, dst );
+            std::vector<unsigned int> image_buf = processimage( src, dst );
 
 //            std::cout << dst->ximage->width << " x " << dst->ximage->height << std::endl;
             // deep copy of dst
@@ -272,7 +285,7 @@ std::vector<unsigned  int *> run( Display * dsp, Window window, struct shmimage 
             }
         }
     }
-    return std::vector<unsigned  int *>() ;
+    return std::vector<std::vector<unsigned int>>() ;
 }
 
 
@@ -342,7 +355,7 @@ struct display_nfo initialize_xserver(bool debug, Display * &dsp, struct shmimag
 
 
 //Main entrypoint to read image
-std::vector<unsigned int *> read_image_from_xserver(bool debug) {
+std::vector<std::vector<unsigned int>> read_image_from_xserver(bool debug) {
 //    Display * dsp;
 //    struct shmimage src, dst ;
 //    display_nfo d_nfo = initialize_xserver(true, dsp, src, dst);
@@ -411,7 +424,7 @@ std::vector<unsigned int *> read_image_from_xserver(bool debug) {
     }
 
     Window window = createwindow( dsp, dstwidth, dstheight ) ;
-    std::vector<unsigned  int *> res = run( dsp, window, &src, &dst ) ;
+    std::vector<std::vector<unsigned int>> res = run( dsp, window, &src, &dst ) ;
     destroywindow( dsp, window ) ;
 
     destroyimage( dsp, &src ) ;

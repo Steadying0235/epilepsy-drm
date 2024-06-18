@@ -2,6 +2,7 @@
 #include "read_image_X11.h"
 #include "vector"
 #include "fstream"
+#include "detect_image.h"
 
 #include <X11/Xlib.h>
 #include <stdio.h>
@@ -39,35 +40,16 @@ void run() {
 
 
     // read image
-    std::vector<unsigned int *> image = read_image_from_xserver(true);
+    std::vector<std::vector<unsigned int>> image = read_image_from_xserver(true);
 
     std::cout << "Got image from Xserver" << std::endl;
 
     // print image data
     std::cout << "Image data: " << std::endl;
 
-    // convert image[0] to an opengl texture
-//    GLuint texture;
-//    glGenTextures(1, &texture);
-//    glBindTexture(GL_TEXTURE_2D, texture);
-//    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image[0]->ximage->width, image[0]->ximage->height, 0, GL_BGRA, GL_UNSIGNED_BYTE, image[0]->data);
-//    glGenerateMipmap(GL_TEXTURE_2D);
-//
-//    // dump texture to file
-//    save_texture_to_file(texture);
-
-
-    // detect image
-
-
-//
-//    std::cout << image->height << " x " << image->width << " \n\n" << image->data << std::endl;
-
-
-    // detect image
-    char ** placeholder_argc = new char *[1];
-    placeholder_argc[0] = "hello.cpp";
-    //detect_epileptic_image(image);
+//    char ** placeholder_argc = new char *[1];
+//    placeholder_argc[0] = "hello.cpp";
+    detect_epileptic_image(image);
     // block the flow
 
 
