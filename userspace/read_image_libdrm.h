@@ -11,3 +11,5 @@
 int  read_image_libdrm();
 
 void is_read_image_libdrm_alive();
+
+void verify_extensions_exit();

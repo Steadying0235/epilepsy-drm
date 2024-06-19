@@ -12,13 +12,18 @@
 #include <fcntl.h>
 #include <iostream>
 
+#include <png.h>
+
 #include <X11/Xlib.h>
+#define EGL_EGLEXT_PROTOTYPES
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #define GL_GLEXT_PROTOTYPES
 #include <GL/gl.h>
 #include <GL/glext.h>
 #include <gbm.h>
+#include <cstring>
+
 
 #define MSG(fmt, ...) printf(fmt "\n", ##__VA_ARGS__)
 using namespace std;
@@ -321,113 +326,81 @@ void runEGL(const DmaBuf *img) {
     XCloseDisplay(xdisp);
 }
 
-// Function to convert DmaBuf to EGL image
-bool convertDmaBufToEGLImage(DmaBuf &dmaBuf) {
-    int fd = dmaBuf.fd;
+// Function to initialize EGL
+EGLDisplay initialize_egl() {
+    EGLDisplay egl_display;
+    EGLint major, minor;
+    egl_display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    if (egl_display == EGL_NO_DISPLAY) {
+        fprintf(stderr, "Failed to get EGL display\n");
+        exit(EXIT_FAILURE);
+    }
+    if (!eglInitialize(egl_display, &major, &minor)) {
+        fprintf(stderr, "Failed to initialize EGL\n");
+        exit(EXIT_FAILURE);
+    }
+    return egl_display;
+}
 
-    // Initialize GBM
-    struct gbm_device *gbmDev = gbm_create_device(fd);
-    if (!gbmDev) {
-        std::cerr << "Failed to create GBM device." << std::endl;
-        return false;
+//EGLImageKHR create_egl_image_from_drm(EGLDisplay egl_display, DmaBuf dma_fb) {
+//    EGLint image_attrs[] = {
+//            EGL_WIDTH, dma_fb.width,
+//            EGL_HEIGHT, dma_fb.height,
+//            EGL_LINUX_DRM_FOURCC_EXT, static_cast<EGLint>(dma_fb.fourcc),
+//            EGL_DMA_BUF_PLANE0_FD_EXT, dma_fb.fd,
+//            EGL_DMA_BUF_PLANE0_OFFSET_EXT, dma_fb.offset,
+//            EGL_DMA_BUF_PLANE0_PITCH_EXT, dma_fb.pitch,
+//            EGL_NONE
+//    };
+//    EGLImageKHR egl_image = eglCreateImageKHR(egl_display, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, NULL, image_attrs);
+//    if (egl_image == EGL_NO_IMAGE_KHR) {
+//        fprintf(stderr, "Failed to create EGL image\n");
+//        exit(EXIT_FAILURE);
+//    }
+//    return egl_image;
+//
+//}
+
+void save_png(const char *filename, unsigned char *image_data, int width, int height) {
+    FILE *fp = fopen(filename, "wb");
+    if (!fp) {
+        fprintf(stderr, "Error: Failed to open %s for writing\n", filename);
+        return;
     }
 
-    // Import the DMA-BUF buffer to GBM
-    struct gbm_bo *bo = gbm_bo_import(gbmDev, GBM_BO_IMPORT_FD, reinterpret_cast<void *>(fd), GBM_BO_USE_SCANOUT);
-    if (!bo) {
-        std::cerr << "Failed to import DMA-BUF to GBM." << std::endl;
-        gbm_device_destroy(gbmDev);
-        return false;
+    png_structp png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    if (!png_ptr) {
+        fclose(fp);
+        fprintf(stderr, "Error: png_create_write_struct failed\n");
+        return;
     }
 
-    // Initialize EGL
-    EGLDisplay eglDpy = eglGetDisplay((EGLNativeDisplayType)gbmDev);
-    if (eglDpy == EGL_NO_DISPLAY) {
-        std::cerr << "Failed to get EGL display." << std::endl;
-        gbm_bo_destroy(bo);
-        gbm_device_destroy(gbmDev);
-        return false;
+    png_infop info_ptr = png_create_info_struct(png_ptr);
+    if (!info_ptr) {
+        png_destroy_write_struct(&png_ptr, (png_infopp)NULL);
+        fclose(fp);
+        fprintf(stderr, "Error: png_create_info_struct failed\n");
+        return;
     }
 
-    EGLBoolean eglInitResult = eglInitialize(eglDpy, NULL, NULL);
-    if (eglInitResult != EGL_TRUE) {
-        std::cerr << "Failed to initialize EGL." << std::endl;
-        gbm_bo_destroy(bo);
-        gbm_device_destroy(gbmDev);
-        return false;
+    png_init_io(png_ptr, fp);
+
+    png_set_IHDR(png_ptr, info_ptr, width, height,
+                 8, PNG_COLOR_TYPE_RGBA, PNG_INTERLACE_NONE,
+                 PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
+
+    png_write_info(png_ptr, info_ptr);
+
+    // Write image data row by row
+    png_bytep row_pointers[height];
+    for (int y = 0; y < height; y++) {
+        row_pointers[y] = image_data + y * width * 4; // Assuming RGBA format
     }
+    png_write_image(png_ptr, row_pointers);
+    png_write_end(png_ptr, NULL);
 
-    // Create EGL surface
-    EGLConfig config;
-    EGLint numConfigs;
-    EGLint configAttribs[] = {
-            EGL_RED_SIZE, 8,
-            EGL_GREEN_SIZE, 8,
-            EGL_BLUE_SIZE, 8,
-            EGL_ALPHA_SIZE, 8,
-            EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
-            EGL_NONE
-    };
-
-    if (!eglChooseConfig(eglDpy, configAttribs, &config, 1, &numConfigs)) {
-        std::cerr << "Failed to choose EGL config." << std::endl;
-        eglTerminate(eglDpy);
-        gbm_bo_destroy(bo);
-        gbm_device_destroy(gbmDev);
-        return false;
-    }
-
-    EGLSurface eglSurf = eglCreateWindowSurface(eglDpy, config, (EGLNativeWindowType)bo, NULL);
-    if (eglSurf == EGL_NO_SURFACE) {
-        std::cerr << "Failed to create EGL surface." << std::endl;
-        eglTerminate(eglDpy);
-        gbm_bo_destroy(bo);
-        gbm_device_destroy(gbmDev);
-        return false;
-    }
-
-    // Create EGL context
-    EGLint ctxAttribs[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
-    EGLContext eglCtx = eglCreateContext(eglDpy, config, EGL_NO_CONTEXT, ctxAttribs);
-    if (eglCtx == EGL_NO_CONTEXT) {
-        std::cerr << "Failed to create EGL context." << std::endl;
-        eglDestroySurface(eglDpy, eglSurf);
-        eglTerminate(eglDpy);
-        gbm_bo_destroy(bo);
-        gbm_device_destroy(gbmDev);
-        return false;
-    }
-
-    // Make the context current
-    if (!eglMakeCurrent(eglDpy, eglSurf, eglSurf, eglCtx)) {
-        std::cerr << "Failed to make EGL context current." << std::endl;
-        eglDestroyContext(eglDpy, eglCtx);
-        eglDestroySurface(eglDpy, eglSurf);
-        eglTerminate(eglDpy);
-        gbm_bo_destroy(bo);
-        gbm_device_destroy(gbmDev);
-        return false;
-    }
-
-    // At this point, EGL context is set up and ready to use
-    std::cout << "EGL initialized successfully." << std::endl;
-
-    // Optionally, render or use the EGL surface here
-
-    // Clean up EGL
-    eglMakeCurrent(eglDpy, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-    eglDestroyContext(eglDpy, eglCtx);
-    eglDestroySurface(eglDpy, eglSurf);
-    eglTerminate(eglDpy);
-
-    // Clean up GBM
-    gbm_bo_destroy(bo);
-    gbm_device_destroy(gbmDev);
-
-    // Close DMA-BUF file descriptor
-    close(fd);
-
-    return true;
+    png_destroy_write_struct(&png_ptr, &info_ptr);
+    fclose(fp);
 }
 
 int read_image_libdrm() {
@@ -453,7 +426,7 @@ int read_image_libdrm() {
             fb_id, fb->width, fb->height, fb->pitch, fb->bpp, fb->depth, fb->handle);
 
         if (fb->handle) {
-            // With edge cases handled, we're ready
+            int texture_dmabuf_fd;
 
             DmaBuf img;
             img.width = fb->width;
@@ -465,13 +438,56 @@ int read_image_libdrm() {
             const int ret = drmPrimeHandleToFD(drmfd, fb->handle, 0, &dma_buf_fd);
             MSG("drmPrimeHandleToFD = %d, fd = %d", ret, dma_buf_fd);
             img.fd = dma_buf_fd;
+            texture_dmabuf_fd = img.fd;
+
+            // With edge cases handled, we're ready
+            EGLContext egl_context;
+            EGLSurface egl_surface;
+            EGLDisplay egl_display = initialize_egl();
+
+
+// Step 2: Import dmabuf as EGLImage
+            EGLImageKHR egl_image = EGL_NO_IMAGE_KHR;
+            EGLint attrs[] = {
+                    EGL_WIDTH, img.width,
+                    EGL_HEIGHT, img.height,
+                    EGL_LINUX_DRM_FOURCC_EXT, DRM_FORMAT_XRGB8888, // Specify the format
+                    EGL_DMA_BUF_PLANE0_FD_EXT, img.fd,
+                    EGL_NONE
+            };
+
+            egl_image = eglCreateImageKHR(egl_display, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, NULL, attrs);
+            if (egl_image == EGL_NO_IMAGE_KHR) {
+                // Handle error
+                fprintf(stderr, "Failed to create EGLImage from dmabuf\n");
+                // Cleanup and return or exit
+            }
+
+
+            // Read the image data from DMA-BUF FD
+            int img_size = img.pitch * img.height;
+            unsigned char *image_data = (unsigned char *)malloc(img_size);
+            if (!image_data) {
+                fprintf(stderr, "Error: Memory allocation failed\n");
+                return 1;
+            }
+
+            lseek(texture_dmabuf_fd, 0, SEEK_SET);
+            read(texture_dmabuf_fd, image_data, img_size);
+
+            // Save image data to PNG
+            save_png("output.png", image_data, img.width, img.height);
+
+            free(image_data);
+            close(texture_dmabuf_fd);
+
+
+            eglTerminate(egl_display);
 
             // If in debug, mirror to
 //            runEGL(&img);
 
 
-            // Using EGL
-            bool success = convertDmaBufToEGLImage(img);
 
         }
         else{
@@ -495,4 +511,31 @@ int read_image_libdrm() {
 
 void is_read_image_libdrm_alive() {
     cout << "read_image_libdrm loaded" << endl;
+}
+
+void verify_extensions_exit(){
+    EGLDisplay egl_display;
+    EGLint major, minor;
+    egl_display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    if (egl_display == EGL_NO_DISPLAY) {
+        fprintf(stderr, "Failed to get EGL display\n");
+        exit(EXIT_FAILURE);
+    }
+    if (!eglInitialize(egl_display, &major, &minor)) {
+        fprintf(stderr, "Failed to initialize EGL\n");
+        exit(EXIT_FAILURE);
+    }
+
+
+    const char* extensions = eglQueryString(egl_display, EGL_EXTENSIONS);
+    if (extensions != nullptr && std::strstr(extensions, "KHR_image_base") != nullptr) {
+        // Extension is supported, proceed with eglCreateImageKHR
+        cout << "KHR Image supported" << endl;
+    } else {
+        // Extension not supported, handle error
+    }
+
+    //terminate the display
+    eglTerminate(egl_display);
+
 }

@@ -51,6 +51,7 @@ void run() {
     detect_epileptic_image(image);
 #endif
 #ifdef READ_LIBDRM
+    verify_extensions_exit();
     is_read_image_libdrm_alive();
     // print image data
     std::cout << "Using libdrm to read desktop " << std::endl;

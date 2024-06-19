@@ -49,7 +49,25 @@ include_directories(/usr/include/drm)
 find_package(X11 REQUIRED)
 
 # Find EGL library
-find_library(EGL_LIBRARY NAMES EGL PATHS /usr/lib /usr/lib64 /usr/lib/x86_64-linux-gnu)
+#find_library(EGL_LIBRARY NAMES EGL PATHS /usr/lib /usr/lib64 /usr/lib/x86_64-linux-gnu)
+#find_package(EGL REQUIRED)
+#target_link_libraries(userspace EGL)
+#target_link_libraries(userspace ${EGL_KHR_LIBRARY})
+
+# Find EGL and EGL KHR headers
+find_path(EGL_INCLUDE_DIR EGL/egl.h PATH_SUFFIXES EGL)
+find_path(EGL_KHR_INCLUDE_DIR EGL/eglext.h PATH_SUFFIXES EGL)
+# Find EGL library
+find_library(EGL_LIBRARY NAMES EGL)
+
+# If you need to find KHR extensions library (if separate)
+# find_library(EGL_KHR_LIBRARY NAMES EGL_KHR)
+
+# Add include directories
+include_directories(${EGL_INCLUDE_DIR} ${EGL_KHR_INCLUDE_DIR})
+
+target_link_libraries(userspace ${EGL_LIBRARY} ${EGL_KHR_LIBRARY})
+
 
 # DEBUG: print out opencv libraries linked:
 cmake_print_variables(${OpenCV_LIBS})
@@ -57,7 +75,13 @@ cmake_print_variables(${OpenCV_LIBS})
 target_link_libraries(userspace ${OpenCV_LIBS})
 
 # Link against libX11 and libEGL
-target_link_libraries(userspace X11 Xext m ${EGL_LIBRARY})
+target_link_libraries(userspace X11 Xext)
+#target_link_libraries(userspace m ${EGL_LIBRARY})
+
+target_link_libraries(userspace
+        ${OPENGL_gl_LIBRARY}  # Link OpenGL library
+        ${EGL_LIBRARIES}      # Link EGL library
+)
 
 # Link against libpng
 target_link_libraries(userspace png)
