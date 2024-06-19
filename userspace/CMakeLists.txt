@@ -10,18 +10,32 @@ include(CMakePrintHelpers)
 set(OpenCV_DIR /home/ao/scratch/epilepsy-drm/userspace/opencv-build)
 find_package(OpenCV REQUIRED)
 
+# Compiler options to determine which ingest method to use to get the image
+option(READ_LIBDRM "Read_libdrm" ON)
+option(READ_X11 "Read_X11" OFF)
+
 # Compiler options to compile for baseline or adaptive
 option(BASELINE "Baseline" ON)
 option(ADAPTIVE "Adaptive" OFF)
 
+# set the detection method to baseline or adaptive via compiler option
 if(BASELINE)
     add_definitions(-DBASELINE)
-    add_executable(userspace main_loop.cpp read_image_X11.cpp detect_image.cpp utils.cpp )
 endif()
 if(ADAPTIVE)
     add_definitions(-DADAPTIVE)
-    add_executable(userspace main_loop.cpp read_image_X11.cpp detect_image.cpp utils.cpp )
 endif()
+
+# Set the read method based on the compiler option
+if(READ_LIBDRM)
+    add_definitions(-DREAD_LIBDRM)
+endif()
+if(READ_X11)
+    add_definitions(-DREAD_X11)
+endif()
+
+add_executable(userspace main_loop.cpp read_image_X11.cpp detect_image.cpp utils.cpp read_image_libdrm.cpp
+        read_image_libdrm.cpp)
 
 # Add your executable
 
@@ -50,6 +64,9 @@ target_link_libraries(userspace png)
 
 # Link OpenGL
 target_link_libraries(userspace GL)
+
+# Link libdrm and libgbm
+target_link_libraries(userspace drm gbm)
 
 # Copy inverseGammaLUT.bin to the build directory
 configure_file(support/inverseGammaLUT.bin ${CMAKE_CURRENT_BINARY_DIR}/inverseGammaLUT.bin COPYONLY)

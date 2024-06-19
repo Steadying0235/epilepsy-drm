@@ -1,8 +1,10 @@
 #include <iostream>
-#include "read_image_X11.h"
 #include "vector"
 #include "fstream"
+
+#include "read_image_X11.h"
 #include "detect_image.h"
+#include "read_image_libdrm.h"
 
 #include <X11/Xlib.h>
 #include <stdio.h>
@@ -37,28 +39,31 @@ void save_texture_to_file(GLuint texture) {
 
 // run() contains the main read -> detect -> block flow
 void run() {
+    std::cout << "Checking Helper Scripts:" << std::endl;
 
 
-    // read image
+#ifdef READ_X11
+    is_read_image_X11_alive();
+    std::cout << "Using X API to read desktop " << std::endl;
     std::vector<std::vector<unsigned int>> image = read_image_from_xserver(true);
-
-    std::cout << "Got image from Xserver" << std::endl;
-
-    // print image data
-    std::cout << "Image data: " << std::endl;
-
-//    char ** placeholder_argc = new char *[1];
-//    placeholder_argc[0] = "hello.cpp";
+    char ** placeholder_argc = new char *[1];
+    placeholder_argc[0] = "hello.cpp";
     detect_epileptic_image(image);
-    // block the flow
+#endif
+#ifdef READ_LIBDRM
+    is_read_image_libdrm_alive();
+    // print image data
+    std::cout << "Using libdrm to read desktop " << std::endl;
+    read_image_libdrm();
 
+#endif
 
 }
 
 int main() {
     std::cout << "Hello, World!" << std::endl;
 
-    is_read_image_X11_alive();
+
     run();
 
     return 0;

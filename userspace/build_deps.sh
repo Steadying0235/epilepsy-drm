@@ -14,3 +14,7 @@ cmake ../opencv-4.x
 # Build (This takes a long time)
 cmake --build .
 
+
+# Install other depedencies
+sudo apt-get install -y libgbm-dev
+
