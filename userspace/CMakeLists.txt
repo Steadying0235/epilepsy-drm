@@ -7,8 +7,8 @@ SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
 include(CMakePrintHelpers)
 
 # Path to your custom compiled OpenCV build
-set(OpenCV_DIR /home/ao/scratch/epilepsy-drm/userspace/opencv-build)
-find_package(OpenCV REQUIRED)
+#set(OpenCV_DIR /home/ao/scratch/epilepsy-drm/userspace/opencv-build)
+#find_package(OpenCV REQUIRED)
 
 # Compiler options to determine which ingest method to use to get the image
 option(READ_LIBDRM "Read_libdrm" ON)
@@ -34,7 +34,7 @@ if(READ_X11)
     add_definitions(-DREAD_X11)
 endif()
 
-add_executable(userspace main_loop.cpp read_image_X11.cpp detect_image.cpp utils.cpp read_image_libdrm.cpp
+add_executable(userspace main_loop.cpp read_image_X11.cpp read_image_libdrm.cpp
         read_image_libdrm.cpp)
 
 # Add your executable
@@ -42,7 +42,8 @@ add_executable(userspace main_loop.cpp read_image_X11.cpp detect_image.cpp utils
 
 # include_directories(${OpenCV_INCLUDE_DIRS})
 # Include DRM and OpenCV directores
-include_directories(${OpenCV_INCLUDE_DIRS})
+#include_directories(${OpenCV_INCLUDE_DIRS})
+
 include_directories(/usr/include/drm)
 
 # Find the necessary libraries
@@ -58,7 +59,7 @@ find_package(X11 REQUIRED)
 find_path(EGL_INCLUDE_DIR EGL/egl.h PATH_SUFFIXES EGL)
 find_path(EGL_KHR_INCLUDE_DIR EGL/eglext.h PATH_SUFFIXES EGL)
 # Find EGL library
-find_library(EGL_LIBRARY NAMES EGL)
+find_library(EGL_LIBRARY NAMES EGL PATHS /usr/lib/x86_64-linux-gnu/)
 
 # If you need to find KHR extensions library (if separate)
 # find_library(EGL_KHR_LIBRARY NAMES EGL_KHR)
@@ -70,9 +71,8 @@ target_link_libraries(userspace ${EGL_LIBRARY} ${EGL_KHR_LIBRARY})
 
 
 # DEBUG: print out opencv libraries linked:
-cmake_print_variables(${OpenCV_LIBS})
-
-target_link_libraries(userspace ${OpenCV_LIBS})
+#cmake_print_variables(${OpenCV_LIBS})
+#target_link_libraries(userspace ${OpenCV_LIBS})
 
 # Link against libX11 and libEGL
 target_link_libraries(userspace X11 Xext)

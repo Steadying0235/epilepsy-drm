@@ -25,6 +25,8 @@
 #include <gbm.h>
 #include <cstring>
 
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
 
 #define MSG(fmt, ...) printf(fmt "\n", ##__VA_ARGS__)
 using namespace std;
@@ -72,9 +74,12 @@ void enumerateModeResources(int fd, const drmModeResPtr res) {
 }
 
 uint32_t get_framebuffer_id() {
+    cout << "start grabbing framebuffer id" << endl;
     const int available = drmAvailable();
-    if (!available)
+    if (available == 0){
+        perror("DRM not available");
         return 1;
+    }
 
     const char *card = "/dev/dri/card0";
 
@@ -162,82 +167,6 @@ void runEGL(const DmaBuf *img) {
     ASSERT(xdisp = XOpenDisplay(NULL));
     eglBindAPI(EGL_OPENGL_API);
     EGLDisplay edisp = eglGetDisplay(xdisp);
-    EGLint ver_min, ver_maj;
-    eglInitialize(edisp, &ver_maj, &ver_min);
-    MSG("EGL: version %d.%d", ver_maj, ver_min);
-    MSG("EGL: EGL_VERSION: '%s'", eglQueryString(edisp, EGL_VERSION));
-    MSG("EGL: EGL_VENDOR: '%s'", eglQueryString(edisp, EGL_VENDOR));
-    MSG("EGL: EGL_CLIENT_APIS: '%s'", eglQueryString(edisp, EGL_CLIENT_APIS));
-    MSG("EGL: client EGL_EXTENSIONS: '%s'", eglQueryString(EGL_NO_DISPLAY, EGL_EXTENSIONS));
-    MSG("EGL: EGL_EXTENSIONS: '%s'", eglQueryString(edisp, EGL_EXTENSIONS));
-
-    static const EGLint econfattrs[] = {
-            EGL_BUFFER_SIZE, 32,
-            EGL_RED_SIZE, 8,
-            EGL_GREEN_SIZE, 8,
-            EGL_BLUE_SIZE, 8,
-            EGL_ALPHA_SIZE, 8,
-
-            EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
-            EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
-
-            EGL_NONE
-    };
-    EGLConfig config;
-    EGLint num_config;
-    eglChooseConfig(edisp, econfattrs, &config, 1, &num_config);
-
-    XVisualInfo *vinfo = NULL;
-    {
-        XVisualInfo xvisual_info = {0};
-        int num_visuals;
-        ASSERT(eglGetConfigAttrib(edisp, config, EGL_NATIVE_VISUAL_ID, (EGLint*)&xvisual_info.visualid));
-        ASSERT(vinfo = XGetVisualInfo(xdisp, VisualScreenMask | VisualIDMask, &xvisual_info, &num_visuals));
-    }
-
-    XSetWindowAttributes winattrs = {0};
-    winattrs.event_mask = KeyPressMask | KeyReleaseMask |
-                          ButtonPressMask | ButtonReleaseMask | PointerMotionMask |
-                          ExposureMask | VisibilityChangeMask | StructureNotifyMask;
-    winattrs.border_pixel = 0;
-    winattrs.bit_gravity = StaticGravity;
-    winattrs.colormap = XCreateColormap(xdisp,
-                                        RootWindow(xdisp, vinfo->screen),
-                                        vinfo->visual, AllocNone);
-    ASSERT(winattrs.colormap != None);
-    winattrs.override_redirect = False;
-
-    Window xwin = XCreateWindow(xdisp, RootWindow(xdisp, vinfo->screen),
-                                0, 0, width, height,
-                                0, vinfo->depth, InputOutput, vinfo->visual,
-                                CWBorderPixel | CWBitGravity | CWEventMask | CWColormap,
-                                &winattrs);
-    ASSERT(xwin);
-
-    XStoreName(xdisp, xwin, "kmsgrab");
-
-    {
-        Atom delete_message = XInternAtom(xdisp, "WM_DELETE_WINDOW", True);
-        XSetWMProtocols(xdisp, xwin, &delete_message, 1);
-    }
-
-    XMapWindow(xdisp, xwin);
-
-    static const EGLint ectx_attrs[] = {
-            EGL_CONTEXT_CLIENT_VERSION, 2,
-            EGL_NONE
-    };
-    EGLContext ectx = eglCreateContext(edisp, config,
-                                       EGL_NO_CONTEXT, ectx_attrs);
-    ASSERT(EGL_NO_CONTEXT != ectx);
-
-    EGLSurface esurf = eglCreateWindowSurface(edisp, config, xwin, 0);
-    ASSERT(EGL_NO_SURFACE != esurf);
-
-    ASSERT(eglMakeCurrent(edisp, esurf,
-                          esurf, ectx));
-
-    MSG("%s", glGetString(GL_EXTENSIONS));
 
     // FIXME check for EGL_EXT_image_dma_buf_import
     EGLAttrib eimg_attrs[] = {
@@ -251,80 +180,44 @@ void runEGL(const DmaBuf *img) {
     };
     EGLImage eimg = eglCreateImage(edisp, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, 0,
                                    eimg_attrs);
-    ASSERT(eimg);
 
-    // FIXME check for GL_OES_EGL_image (or alternatives)
-    GLuint tex = 1;
-    //glGenTextures(1, &tex);
-    glBindTexture(GL_TEXTURE_2D, tex);
-    PFNGLEGLIMAGETARGETTEXTURE2DOESPROC glEGLImageTargetTexture2DOES =
-            (PFNGLEGLIMAGETARGETTEXTURE2DOESPROC)eglGetProcAddress("glEGLImageTargetTexture2DOES");
-    ASSERT(glEGLImageTargetTexture2DOES);
-    glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, eimg);
-    ASSERT(glGetError() == 0);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    // Obtain image dimensions
+    EGLint img_width, img_height;
+    img_width = img->width;
+    img_height = img->height;
 
-    const char *fragment =
-            "#version 130\n"
-            "uniform vec2 res;\n"
-            "uniform sampler2D tex;\n"
-            "void main() {\n"
-            "vec2 uv = gl_FragCoord.xy / res;\n"
-            "uv.y = 1. - uv.y;\n"
-            "gl_FragColor = texture(tex, uv);\n"
-            "}\n"
-    ;
-    int prog = ((PFNGLCREATESHADERPROGRAMVPROC)(eglGetProcAddress("glCreateShaderProgramv")))(GL_FRAGMENT_SHADER, 1, &fragment);
-    glUseProgram(prog);
-    glUniform1i(glGetUniformLocation(prog, "tex"), 0);
+// Calculate the size of the image data
+    size_t img_size = img_width * img_height * 4; // Assuming RGBA format
 
-    for (;;) {
-        while (XPending(xdisp)) {
-            XEvent e;
-            XNextEvent(xdisp, &e);
-            switch (e.type) {
-                case ConfigureNotify:
-                {
-                    width = e.xconfigure.width;
-                    height = e.xconfigure.height;
-                }
-                    break;
-
-                case KeyPress:
-                    switch(XLookupKeysym(&e.xkey, 0)) {
-                        case XK_Escape:
-                        case XK_q:
-                            goto exit;
-                            break;
-                    }
-                    break;
-
-                case ClientMessage:
-                case DestroyNotify:
-                case UnmapNotify:
-                    goto exit;
-                    break;
-            }
-        }
-
-        {
-            glViewport(0, 0, width, height);
-            glClear(GL_COLOR_BUFFER_BIT);
-
-            glUniform2f(glGetUniformLocation(prog, "res"), width, height);
-            glRects(-1, -1, 1, 1);
-
-            ASSERT(eglSwapBuffers(edisp, esurf));
-        }
+// Allocate memory to store the image data
+    unsigned char *img_data = (unsigned char *)malloc(img_size);
+    if (!img_data) {
+        // Handle memory allocation error
+        return;
     }
 
-    exit:
-    eglMakeCurrent(edisp, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-    eglDestroyContext(edisp, ectx);
-    eglDestroySurface(xdisp, esurf);
-    XDestroyWindow(xdisp, xwin);
-    eglTerminate(edisp);
-    XCloseDisplay(xdisp);
+// Bind EGLImage to get its data
+    if (!eglExportDMABUFImageQueryMESA(edisp, eimg, NULL, NULL, NULL)) {
+        // Handle EGLImage export query error
+        free(img_data);
+        return;
+    }
+
+// Assuming you have obtained 'eimg_data' somehow (not specified in the question)
+
+// Write the image data to a PNG file
+    if (!stbi_write_png("output.png", img_width, img_height, 4, img_data, img_width * 4)) {
+        // Handle stbi_write_png error
+    }
+
+// Free allocated memory
+    free(img_data);
+
+
+
+
+// Cleanup EGLImage and OpenGL resources as needed
+
 }
 
 // Function to initialize EGL
@@ -404,11 +297,35 @@ void save_png(const char *filename, unsigned char *image_data, int width, int he
     fclose(fp);
 }
 
+// Function to save OpenGL texture to a file
+bool saveTextureToFile(const char* filename, GLuint textureID, GLenum format, int width, int height) {
+    // Allocate memory for the texture data
+    unsigned char* data = new unsigned char[width * height * 4]; // Assuming RGBA format
+
+    // Bind the texture
+    glBindTexture(GL_TEXTURE_2D, textureID);
+
+    // Read texture data from GPU to CPU
+    glGetTexImage(GL_TEXTURE_2D, 0, format, GL_UNSIGNED_BYTE, data);
+
+    // Unbind the texture
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    // Write texture data to file using stb_image_write
+    bool success = stbi_write_png(filename, width, height, 4, data, width * 4);
+
+    // Clean up allocated memory
+    delete[] data;
+
+    return success;
+}
 
 
 int read_image_libdrm() {
 
     uint32_t fb_id = get_framebuffer_id();
+
+    MSG("Framebuffer id grabbed: %x", fb_id);
 
 
     const char *card = "/dev/dri/card0";
@@ -441,9 +358,6 @@ int read_image_libdrm() {
             const int ret = drmPrimeHandleToFD(drmfd, fb->handle, 0, &dma_buf_fd);
             MSG("drmPrimeHandleToFD = %d, fd = %d", ret, dma_buf_fd);
             img.fd = dma_buf_fd;
-            texture_dmabuf_fd = img.fd;
-
-
 
             // Assuming OpenGL context is properly set up and bound
 
@@ -455,9 +369,10 @@ int read_image_libdrm() {
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img.width, img.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 
             // Map the DMA-BUF into OpenGL texture
-            void *ptr = mmap(NULL, img.pitch * img.height, PROT_READ, MAP_SHARED, texture_dmabuf_fd, 0);
+            void *ptr = mmap(NULL, img.pitch * img.height, PROT_READ, MAP_SHARED, img.fd, 0);
             if (ptr == MAP_FAILED) {
                 // Handle mmap error
+                cout << "mmap failed" << endl;
             }
 
             glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, img.width, img.height, GL_RGBA, GL_UNSIGNED_BYTE, ptr);
@@ -470,9 +385,19 @@ int read_image_libdrm() {
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
+            bool success = saveTextureToFile("texture_dump.png", textureId, GL_RGBA, img.width, img.height);
+
+            if (success) {
+                std::cout << "Texture dumped successfully to texture_dump.png\n";
+            } else {
+                std::cerr << "Failed to dump texture to file\n";
+            }
+
             // Unbind the texture
             glBindTexture(GL_TEXTURE_2D, 0);
 
+
+            runEGL(&img);
 
 
 
