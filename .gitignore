@@ -133,3 +133,7 @@ userspace/opencv-build/
 userspace/cmake-build-debug/
 
 userspace/build/
+
+userspace/opencv-4.x/
+
+*.zip

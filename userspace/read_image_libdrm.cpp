@@ -11,6 +11,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <iostream>
+#include <sys/mman.h>
 
 #include <png.h>
 
@@ -403,6 +404,8 @@ void save_png(const char *filename, unsigned char *image_data, int width, int he
     fclose(fp);
 }
 
+
+
 int read_image_libdrm() {
 
     uint32_t fb_id = get_framebuffer_id();
@@ -440,52 +443,36 @@ int read_image_libdrm() {
             img.fd = dma_buf_fd;
             texture_dmabuf_fd = img.fd;
 
-            // With edge cases handled, we're ready
-            EGLContext egl_context;
-            EGLSurface egl_surface;
-            EGLDisplay egl_display = initialize_egl();
 
 
-// Step 2: Import dmabuf as EGLImage
-            EGLImageKHR egl_image = EGL_NO_IMAGE_KHR;
-            EGLint attrs[] = {
-                    EGL_WIDTH, img.width,
-                    EGL_HEIGHT, img.height,
-                    EGL_LINUX_DRM_FOURCC_EXT, DRM_FORMAT_XRGB8888, // Specify the format
-                    EGL_DMA_BUF_PLANE0_FD_EXT, img.fd,
-                    EGL_NONE
-            };
+            // Assuming OpenGL context is properly set up and bound
 
-            egl_image = eglCreateImageKHR(egl_display, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, NULL, attrs);
-            if (egl_image == EGL_NO_IMAGE_KHR) {
-                // Handle error
-                fprintf(stderr, "Failed to create EGLImage from dmabuf\n");
-                // Cleanup and return or exit
+            GLuint textureId;
+            glGenTextures(1, &textureId);
+            glBindTexture(GL_TEXTURE_2D, textureId);
+
+            // Allocate texture storage (assuming RGBA format for simplicity)
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img.width, img.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+
+            // Map the DMA-BUF into OpenGL texture
+            void *ptr = mmap(NULL, img.pitch * img.height, PROT_READ, MAP_SHARED, texture_dmabuf_fd, 0);
+            if (ptr == MAP_FAILED) {
+                // Handle mmap error
             }
 
+            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, img.width, img.height, GL_RGBA, GL_UNSIGNED_BYTE, ptr);
 
-            // Read the image data from DMA-BUF FD
-            int img_size = img.pitch * img.height;
-            unsigned char *image_data = (unsigned char *)malloc(img_size);
-            if (!image_data) {
-                fprintf(stderr, "Error: Memory allocation failed\n");
-                return 1;
-            }
+            munmap(ptr, img.pitch * img.height);
 
-            lseek(texture_dmabuf_fd, 0, SEEK_SET);
-            read(texture_dmabuf_fd, image_data, img_size);
+            // Set texture parameters (filtering and wrapping)
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-            // Save image data to PNG
-            save_png("output.png", image_data, img.width, img.height);
+            // Unbind the texture
+            glBindTexture(GL_TEXTURE_2D, 0);
 
-            free(image_data);
-            close(texture_dmabuf_fd);
-
-
-            eglTerminate(egl_display);
-
-            // If in debug, mirror to
-//            runEGL(&img);
 
 
 
