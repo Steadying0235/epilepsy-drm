@@ -7,8 +7,8 @@ SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
 include(CMakePrintHelpers)
 
 # Path to your custom compiled OpenCV build
-#set(OpenCV_DIR /home/ao/scratch/epilepsy-drm/userspace/opencv-build)
-#find_package(OpenCV REQUIRED)
+set(OpenCV_DIR /home/ao/scratch/epilepsy-drm/userspace/opencv-build)
+find_package(OpenCV REQUIRED)
 
 # Compiler options to determine which ingest method to use to get the image
 option(READ_LIBDRM "Read_libdrm" ON)
@@ -18,6 +18,11 @@ option(READ_X11 "Read_X11" OFF)
 option(BASELINE "Baseline" ON)
 option(ADAPTIVE "Adaptive" OFF)
 
+# Set debug option
+option(DEBUG "Debug" ON)
+
+
+
 # set the detection method to baseline or adaptive via compiler option
 if(BASELINE)
     add_definitions(-DBASELINE)
@@ -26,6 +31,9 @@ if(ADAPTIVE)
     add_definitions(-DADAPTIVE)
 endif()
 
+if(DEBUG)
+    add_definitions(-DDEBUG)
+endif()
 # Set the read method based on the compiler option
 if(READ_LIBDRM)
     add_definitions(-DREAD_LIBDRM)
@@ -35,25 +43,19 @@ if(READ_X11)
 endif()
 
 add_executable(userspace main_loop.cpp read_image_X11.cpp read_image_libdrm.cpp
-        read_image_libdrm.cpp)
+        read_image_libdrm.cpp detect_image.cpp utils.cpp)
 
 # Add your executable
 
 
 # include_directories(${OpenCV_INCLUDE_DIRS})
 # Include DRM and OpenCV directores
-#include_directories(${OpenCV_INCLUDE_DIRS})
+include_directories(${OpenCV_INCLUDE_DIRS})
 
 include_directories(/usr/include/drm)
 
 # Find the necessary libraries
 find_package(X11 REQUIRED)
-
-# Find EGL library
-#find_library(EGL_LIBRARY NAMES EGL PATHS /usr/lib /usr/lib64 /usr/lib/x86_64-linux-gnu)
-#find_package(EGL REQUIRED)
-#target_link_libraries(userspace EGL)
-#target_link_libraries(userspace ${EGL_KHR_LIBRARY})
 
 # Find EGL and EGL KHR headers
 find_path(EGL_INCLUDE_DIR EGL/egl.h PATH_SUFFIXES EGL)
@@ -71,8 +73,8 @@ target_link_libraries(userspace ${EGL_LIBRARY} ${EGL_KHR_LIBRARY})
 
 
 # DEBUG: print out opencv libraries linked:
-#cmake_print_variables(${OpenCV_LIBS})
-#target_link_libraries(userspace ${OpenCV_LIBS})
+cmake_print_variables(${OpenCV_LIBS})
+target_link_libraries(userspace ${OpenCV_LIBS})
 
 # Link against libX11 and libEGL
 target_link_libraries(userspace X11 Xext)
@@ -97,6 +99,6 @@ configure_file(support/inverseGammaLUT.bin ${CMAKE_CURRENT_BINARY_DIR}/inverseGa
 
 
 # Link against your custom compiled OpenCV libraries
-#link_directories(${OpenCV_DIR}/lib)
+link_directories(${OpenCV_DIR}/lib)
 
 

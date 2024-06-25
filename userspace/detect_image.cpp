@@ -12,6 +12,7 @@
 #include <chrono>
 #include <X11/Xlib.h>
 #include <fstream>
+#include <GL/gl.h>
 
 #include "utils.h"
 
@@ -226,43 +227,34 @@ void* checkLumColThresh(void* arg) {
     return nullptr;
 }
 
-/* ./baseline -f filename [-letterbox -crop] */
-/* ./adaptive -f filename [-letterbox -crop] [-h xx -w xx -size xx -d xx] */
-// TODO: batch process
-int detect_epileptic_image(std::vector<std::vector<unsigned int>> images) {
 
-    /* Parse command line arguments */
-    int screenSize, viewingDistance;
+// Function to convert GLuint texture to OpenCV Mat
+cv::Mat textureToMat(GLuint textureId, int width, int height) {
+    // Bind the texture
+    glBindTexture(GL_TEXTURE_2D, textureId);
+
+    // Allocate memory for the texture data
+    std::vector<GLubyte> textureData(width * height * 3); // Assuming RGB format
+
+    // Read texture data from OpenGL
+    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGB, GL_UNSIGNED_BYTE, textureData.data());
+    cv::Mat mat(height, width, CV_8UC3, textureData.data());
+
+
+    cv::flip(mat, mat, 0);
+
+    // Unbind the texture
+    glBindTexture(GL_TEXTURE_2D, 0);
+    return mat;
+}
+
+
+int detect_epileptic_image_opengl(std::vector<GLuint> textures) {
+
+    // given an array of textures, convert to Mats and then run detection code
+
 
 #ifdef BASELINE
-    /* Parse resolution, screen size and viewing distance */
-    cout << "Using baseline mode" << endl;
-    resolution_h = 540;
-    resolution_w = 960;
-
-    const int rows = 540; // Example rows and cols
-    const int cols = 960;
-
-    // Create a file stream for writing
-    ofstream outFile("output.txt");
-
-    // Check if the file stream is open
-    if (!outFile.is_open()) {
-        cout << "Failed to open output file." << endl;
-        return 1;
-    }
-
-    // Write the unsigned int* array to the file
-    for (int i = 0; i < rows * cols; ++i) {
-        outFile << images[1][i] << " ";
-
-        // Optionally, add newline after every 'cols' elements
-        if ((i + 1) % cols == 0) {
-            outFile << endl;
-        }
-    }
-
-    cout << "Wrote to output.txt" << endl;
 
     // screenSize = 15;
     // viewingDistance = 23;
@@ -277,50 +269,19 @@ int detect_epileptic_image(std::vector<std::vector<unsigned int>> images) {
 
     std::vector<cv::Mat> frames;
 
-    for (int i=0;i<15;i++) {
+    for (int i=0;i<textures.size();i++) {
 
-        // Example unsigned int* array (replace with your actual data)
-        std::vector<unsigned int> myUnsignedIntArray = images[i];
+        cout << "Importing texture " << i << " to a Mat" << endl;
+        cv::Mat converted_matrix = textureToMat(textures[i], 1920, 1080);
+        frames.push_back(converted_matrix);
 
-        // Calculate the number of pixels
-        int numPixels = myUnsignedIntArray.size();
+        // DEBUG: convert matricies to png for texture inspection
+#ifdef DEBUG
+        char [15] filename_frmt;
+        sprintf(filename_frmt, "image_%d.png", i);  //filepath with frame info
+        cv::imwrite(filename_frmt, image);
 
-        // Determine the number of channels (assuming RGB here)
-        int numChannels = 3;  // RGB has 3 channels
-
-        // Create a Mat object of appropriate size and type
-        cv::Mat image(rows, cols, CV_8UC3);  // CV_8UC3 for 8-bit unsigned integer channels (RGB)
-
-        int pixelIndex = 0;
-        for (int row = 0; row < rows; ++row) {
-            for (int col = 0; col < cols; ++col) {
-                if (pixelIndex < numPixels) {
-                    unsigned int pixelValue = myUnsignedIntArray[pixelIndex];
-                    uchar blue = pixelValue & 0xFF;
-                    uchar green = (pixelValue >> 8) & 0xFF;
-                    uchar red = (pixelValue >> 16) & 0xFF;
-
-                    // Set pixel value in the Mat
-                    image.at<cv::Vec3b>(row, col) = cv::Vec3b(blue, green, red);
-
-                    pixelIndex++;
-                } else {
-                    // Handle case where numPixels is smaller than rows * cols
-                    // This is optional depending on your logic
-                    break;
-                }
-            }
-        }
-
-
-        // add processed mat to vector
-        frames.push_back(image);
-
-        // Debug: dump feed to files to confirm integrity
-        char filename_fstring [15];
-        sprintf(filename_fstring, "test_%d.png", i);
-        // Display the image (optional)
-        cv::imwrite(filename_fstring, image);
+#endif
 
     }
 
@@ -330,9 +291,6 @@ int detect_epileptic_image(std::vector<std::vector<unsigned int>> images) {
 
     /* get FPS */
     int fps = 30;
-
-
-    //const int fps = cap.get(CAP_PROP_FPS);
 
     int freqLum = 0, freqCol = 0;
 
@@ -344,7 +302,6 @@ int detect_epileptic_image(std::vector<std::vector<unsigned int>> images) {
     int indexArray[NTHREADS];
 
     int frameCount = 0;
-
     bool not_end_of_buffer = true;
 
     /* Main loop */

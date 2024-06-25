@@ -1,10 +1,20 @@
 #include <iostream>
-#include "vector"
+#include <vector>
 #include "fstream"
 
+// import x11 if X11 shm used as ingest
+#ifdef READ_X11
 #include "read_image_X11.h"
-#include "detect_image.h"
+#endif
+
+// import libdrm if libdrm used as ingest
+#ifdef READ_LIBDRM
 #include "read_image_libdrm.h"
+#endif
+
+
+#include "detect_image.h"
+
 
 #include <X11/Xlib.h>
 #include <stdio.h>
@@ -14,27 +24,6 @@
 #include <GL/gl.h>
 #include <GL/glext.h>
 
-
-
-void save_raw_image_to_file(shmimage *image) {
-    std::ofstream file;
-    file.open("image.raw", std::ios::binary);
-    file.write((char *) image[0].data, image[0].ximage->height * image[0].ximage->width * 4);
-    file.close();
-}
-
-void save_texture_to_file(GLuint texture) {
-    glBindTexture(GL_TEXTURE_2D, texture);
-    int width, height;
-    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &width);
-    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &height);
-    std::vector<uint8_t> data(width * height * 4);
-    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, data.data());
-    std::ofstream file;
-    file.open("texture.raw", std::ios::binary);
-    file.write((char *) data.data(), width * height * 4);
-    file.close();
-}
 
 
 // run() contains the main read -> detect -> block flow
@@ -55,7 +44,15 @@ void run() {
     is_read_image_libdrm_alive();
     // print image data
     std::cout << "Using libdrm to read desktop " << std::endl;
-    read_image_libdrm();
+    GLuint texture = read_image_libdrm();
+
+    std::vector<GLuint> textures;
+    textures.resize(3);
+    textures[0] = texture;
+    textures[1] = texture;
+    textures[2] = texture;
+
+    detect_epileptic_image_opengl(textures);
 
 #endif
 
