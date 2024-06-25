@@ -232,14 +232,11 @@ void* checkLumColThresh(void* arg) {
 cv::Mat textureToMat(GLuint textureId, int width, int height) {
     // Bind the texture
     glBindTexture(GL_TEXTURE_2D, textureId);
-
     // Allocate memory for the texture data
     std::vector<GLubyte> textureData(width * height * 3); // Assuming RGB format
-
     // Read texture data from OpenGL
     glGetTexImage(GL_TEXTURE_2D, 0, GL_RGB, GL_UNSIGNED_BYTE, textureData.data());
     cv::Mat mat(height, width, CV_8UC3, textureData.data());
-
 
     cv::flip(mat, mat, 0);
 
@@ -277,9 +274,9 @@ int detect_epileptic_image_opengl(std::vector<GLuint> textures) {
 
         // DEBUG: convert matricies to png for texture inspection
 #ifdef DEBUG
-        char [15] filename_frmt;
+        char filename_frmt [15];
         sprintf(filename_frmt, "image_%d.png", i);  //filepath with frame info
-        cv::imwrite(filename_frmt, image);
+        cv::imwrite(filename_frmt, converted_matrix);
 
 #endif
 
