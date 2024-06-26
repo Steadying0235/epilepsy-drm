@@ -1,11 +1,12 @@
 #include <iostream>
 #include <vector>
-#include "fstream"
 
 // import x11 if X11 shm used as ingest
 #ifdef READ_X11
 #include "read_image_X11.h"
 #endif
+
+using namespace std;
 
 // import libdrm if libdrm used as ingest
 #ifdef READ_LIBDRM
@@ -14,16 +15,6 @@
 
 
 #include "detect_image.h"
-
-
-#include <X11/Xlib.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <png.h> // For PNG file saving (you'll need libpng)
-#include <GL/gl.h>
-#include <GL/glext.h>
-
 
 
 // run() contains the main read -> detect -> block flow
@@ -44,17 +35,12 @@ void run() {
     is_read_image_libdrm_alive();
     // print image data
     std::cout << "Using libdrm to read desktop " << std::endl;
-    GLuint texture = read_image_libdrm();
-
-    std::vector<GLuint> textures;
-    textures.resize(3);
-    textures[0] = texture;
-    textures[1] = texture;
-    textures[2] = texture;
+    vector<GLuint> textures = read_image_libdrm(30);
 
     detect_epileptic_image_opengl(textures);
-
 #endif
+
+
 
 }
 

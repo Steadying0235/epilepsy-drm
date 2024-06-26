@@ -30,9 +30,11 @@
 #include <gbm.h>
 #include <cstring>
 
+#import <vector>
+
 #pragma once
 
-GLuint  read_image_libdrm();
+std::vector<GLuint> read_image_libdrm(int i);
 
 void is_read_image_libdrm_alive();
 

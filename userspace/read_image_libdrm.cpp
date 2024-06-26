@@ -1,16 +1,17 @@
 #include "read_image_libdrm.h"
 
 // debug texture exporter
+#ifdef DEBUG_LIBDRM
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
-
+#endif
 
 #define MSG(fmt, ...) printf(fmt "\n", ##__VA_ARGS__)
 using namespace std;
 #define ASSERT(cond) \
 	if (!(cond)) { \
 		MSG("ERROR @ %s:%d: (%s) failed", __FILE__, __LINE__, #cond); \
-		return 0; \
+		throw 0; \
 	}
 
 
@@ -156,7 +157,9 @@ EGLBoolean eglDestroyImageKHR(EGLDisplay dpy, EGLImageKHR image){
     return destroyImageProc(dpy, image);
 }
 
-GLuint runEGL(const DmaBuf *img) {
+vector<GLuint> runEGL(const DmaBuf *img, int num_frames) {
+    std::vector<GLuint> frame_textures(num_frames);
+
     Display *xdisp;
     ASSERT(xdisp = XOpenDisplay(NULL));
     eglBindAPI(EGL_OPENGL_API);
@@ -261,51 +264,56 @@ GLuint runEGL(const DmaBuf *img) {
     ASSERT(glEGLImageTargetTexture2DOES);
     glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, eimg);
     ASSERT(glGetError() == 0);
+
+
+
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 
-//    const char *fragment =
-//            "#version 130\n"
-//            "uniform vec2 res;\n"
-//            "uniform sampler2D tex;\n"
-//            "void main() {\n"
-//            "vec2 uv = gl_FragCoord.xy / res;\n"
-//            "uv.y = 1. - uv.y;\n"
-//            "gl_FragColor = texture(tex, uv);\n"
-//            "}\n"
-//    ;
-//    int prog = ((PFNGLCREATESHADERPROGRAMVPROC)(eglGetProcAddress("glCreateShaderProgramv")))(GL_FRAGMENT_SHADER, 1, &fragment);
-//    glUseProgram(prog);
-//    glUniform1i(glGetUniformLocation(prog, "tex"), 0);
 
 
-// if in a debug build, dumb copy framebuffer to cpu to debug the texture
-#ifdef DEBUG
-    cout << "DEBUG: Dumped image to texture_dump.png" << endl;
-    // Define variables to store texture width and height
-    int width = img->width;
-    int height = img->height;
-// Create a buffer to hold texture data
-    unsigned char *data = (unsigned char*)malloc(width * height * 4); // Assuming RGBA format
-// Read texture data from GPU
-    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-// Save the texture data to a PNG file using stb_image_write
-    stbi_write_png("texture_dump.png", width, height, 4, data, width * 4);
-// Free allocated memory
-    free(data);
-#endif
+
+    for (int i = 0; i < num_frames; ++i) {
+        GLuint tex;
+        glGenTextures(1, &tex);
+        glBindTexture(GL_TEXTURE_2D, tex);
+        glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, eimg);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        frame_textures[i] = tex;
+
+        // if in a debug build, dumb copy framebuffer to cpu to debug the texture
+        #ifdef DEBUG_LIBDRM
+        cout << "DEBUG: Dumped image to texture_dump.png" << endl;
+            // Define variables to store texture width and height
+        int width = img->width;
+        int height = img->height;
+        // Create a buffer to hold texture data
+            unsigned char *data = (unsigned char*)malloc(width * height * 4); // Assuming RGBA format
+        // Read texture data from GPU
+            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+
+            char filename_buf [27];
+        sprintf(filename_buf, "texture_dump_frame_%d.png", i);
+
+        // Save the texture data to a PNG file using stb_image_write
+            stbi_write_png(filename_buf, width, height, 4, data, width * 4);
+        // Free allocated memory
+            free(data);
+        #endif
+
+    }
 
 
-exit:
-    eglMakeCurrent(edisp, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-    eglDestroyContext(edisp, ectx);
-    eglDestroySurface(xdisp, esurf);
-    XDestroyWindow(xdisp, xwin);
-    eglTerminate(edisp);
-    XCloseDisplay(xdisp);
+//exit:
+//    eglMakeCurrent(edisp, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+//    eglDestroyContext(edisp, ectx);
+//    eglDestroySurface(xdisp, esurf);
+//    XDestroyWindow(xdisp, xwin);
+//    eglTerminate(edisp);
+//    XCloseDisplay(xdisp);
 
     // return texture id
 
-    return tex;
+    return frame_textures;
 
 
 
@@ -315,44 +323,18 @@ exit:
 }
 
 
-// Function to save OpenGL texture to a file
-bool saveTextureToFile(const char* filename, GLuint textureID, GLenum format, int width, int height) {
-    // Allocate memory for the texture data
-    unsigned char* data = new unsigned char[width * height * 4]; // Assuming RGBA format
 
-    // Bind the texture
-    glBindTexture(GL_TEXTURE_2D, textureID);
-
-    // Read texture data from GPU to CPU
-    glGetTexImage(GL_TEXTURE_2D, 0, format, GL_UNSIGNED_BYTE, data);
-
-    // Unbind the texture
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    // Write texture data to file using stb_image_write
-    bool success = stbi_write_png(filename, width, height, 4, data, width * 4);
-
-    // Clean up allocated memory
-    delete[] data;
-
-    return success;
-}
-
-
-GLuint read_image_libdrm() {
+std::vector<GLuint> read_image_libdrm(int num_frames) {
 
     uint32_t fb_id = get_framebuffer_id();
-
     MSG("Framebuffer id grabbed: %x", fb_id);
-
-
     const char *card = "/dev/dri/card0";
 
     MSG("Opening card %s", card);
     const int drmfd = open(card, O_RDONLY);
     if (drmfd < 0) {
         perror("Cannot open card");
-        return 1;
+        throw 1;
     }
 
     int dma_buf_fd = -1;
@@ -377,47 +359,9 @@ GLuint read_image_libdrm() {
             MSG("drmPrimeHandleToFD = %d, fd = %d", ret, dma_buf_fd);
             img.fd = dma_buf_fd;
 
-            // Assuming OpenGL context is properly set up and bound
+            vector<GLuint> texture = runEGL(&img, num_frames);
 
-            GLuint textureId;
-            glGenTextures(1, &textureId);
-            glBindTexture(GL_TEXTURE_2D, textureId);
-
-            // Allocate texture storage (assuming RGBA format for simplicity)
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img.width, img.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-
-            // Map the DMA-BUF into OpenGL texture
-            void *ptr = mmap(NULL, img.pitch * img.height, PROT_READ, MAP_SHARED, img.fd, 0);
-            if (ptr == MAP_FAILED) {
-                // Handle mmap error
-                cout << "mmap failed" << endl;
-            }
-
-            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, img.width, img.height, GL_RGBA, GL_UNSIGNED_BYTE, ptr);
-
-            munmap(ptr, img.pitch * img.height);
-
-            // Set texture parameters (filtering and wrapping)
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-//            bool success = saveTextureToFile("texture_dump.png", textureId, GL_RGBA, img.width, img.height);
-
-//            if (success) {
-//                std::cout << "Texture dumped successfully to texture_dump.png\n";
-//            } else {
-//                std::cerr << "Failed to dump texture to file\n";
-//            }
-
-            // Unbind the texture
-            glBindTexture(GL_TEXTURE_2D, 0);
-
-
-            GLuint texture = runEGL(&img);
-
-
+            return texture;
 
         }
         else{
@@ -433,7 +377,7 @@ GLuint read_image_libdrm() {
         MSG("Cannot open fb %#x", fb_id);
     }
 
-    return 0;
+    throw 0;
 
 
 

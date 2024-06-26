@@ -13,8 +13,14 @@
 #include <X11/Xlib.h>
 #include <fstream>
 #include <GL/gl.h>
+#include <GL/glext.h>
+#include <GLES2/gl2.h>
+#include <GLES2/gl2ext.h>
 
 #include "utils.h"
+
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
 
 using namespace std;
 using namespace std::chrono;
@@ -232,17 +238,27 @@ void* checkLumColThresh(void* arg) {
 cv::Mat textureToMat(GLuint textureId, int width, int height) {
     // Bind the texture
     glBindTexture(GL_TEXTURE_2D, textureId);
+    GLenum error = glGetError();
+    if (error) {
+        cout << "OpenGL Error binding texture" << endl;
+        return cv::Mat();
+    }
+
+
     // Allocate memory for the texture data
-    std::vector<GLubyte> textureData(width * height * 3); // Assuming RGB format
-    // Read texture data from OpenGL
-    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGB, GL_UNSIGNED_BYTE, textureData.data());
-    cv::Mat mat(height, width, CV_8UC3, textureData.data());
+    cv::Mat image(height, width, CV_8UC4); // Assuming RGBA texture format
 
-    cv::flip(mat, mat, 0);
+    // Bind the texture buffer and map it to a pointer
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0); // Ensure no PBO is bound
+    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, image.data);
 
-    // Unbind the texture
+    // Unbind texture
     glBindTexture(GL_TEXTURE_2D, 0);
-    return mat;
+
+    return image;
+
+
+
 }
 
 
@@ -257,6 +273,9 @@ int detect_epileptic_image_opengl(std::vector<GLuint> textures) {
     // viewingDistance = 23;
     const int minSafeArea = 21824; // 341*256*0.25
 #endif
+
+    resolution_h = 1080;
+    resolution_w = 1920;
 
     /* Prepare inverse gamma lookup table */
     gammaLUT = readBinaryFile("inverseGammaLUT.bin");
