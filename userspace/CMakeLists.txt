@@ -91,6 +91,10 @@ target_link_libraries(userspace png)
 # Link OpenGL
 target_link_libraries(userspace GL)
 
+# Link OpenCL
+find_package(OpenCL REQUIRED)
+target_link_libraries(userspace OpenCL::OpenCL)
+
 # Link libdrm and libgbm
 target_link_libraries(userspace drm gbm)
 

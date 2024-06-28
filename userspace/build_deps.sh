@@ -18,3 +18,6 @@ cmake --build .
 # Install other depedencies
 sudo apt-get install -y libgbm-dev
 
+# If on Intel, install Intel OpenCL and headers
+sudo apt install intel-opencl-icd clinfo ocl-icd-opencl-dev
+

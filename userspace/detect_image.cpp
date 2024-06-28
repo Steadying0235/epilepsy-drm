@@ -8,6 +8,10 @@
 #include <array>
 #include <opencv2/opencv.hpp>
 #include <opencv2/core/hal/intrin.hpp>
+#include <opencv2/core/opengl.hpp>
+#include <opencv2/core/ocl.hpp>
+#include <opencv2/core/opencl/ocl_defs.hpp>
+#include <CL/cl.h>
 
 #include <chrono>
 #include <X11/Xlib.h>
@@ -257,7 +261,17 @@ cv::Mat textureToMat(GLuint textureId, int width, int height) {
 
     return image;
 
+}
 
+// Function to convert GL texture that keeps everything in VRAM
+cv::UMat textureToVRAMMat(GLuint textureId, int width, int height) {
+
+    cv::UMat uMatTexture(height, width, CV_8UC4);
+    glBindTexture(GL_TEXTURE_2D, textureId);
+    glGetTexImage(GL_TEXTURE_2D, 0, GL_BGRA, GL_UNSIGNED_BYTE, uMatTexture.getMat(cv::ACCESS_WRITE).data);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    return uMatTexture;
 
 }
 
@@ -283,20 +297,24 @@ int detect_epileptic_image_opengl(std::vector<GLuint> textures) {
     bool useLetterbox = false, useCrop = false;
     auto start = high_resolution_clock::now();
 
-    std::vector<cv::Mat> frames;
-
+    std::vector<cv::UMat> frames;
     for (int i=0;i<textures.size();i++) {
 
         cout << "Importing texture " << i << " to a Mat" << endl;
-        cv::Mat converted_matrix = textureToMat(textures[i], 1920, 1080);
-        frames.push_back(converted_matrix);
+        // Software method: SLOW!
+//        cv::Mat converted_matrix = textureToMat(textures[i], 1920, 1080);
+//        frames.push_back(converted_matrix);
+
+        // SoftHardware method: Umat is potentially hardware accelerated :)
+            cv::UMat vram_matrix;
+            vram_matrix = textureToVRAMMat(textures[i], 1920, 1080);
+            frames.push_back(vram_matrix);
 
         // DEBUG: convert matricies to png for texture inspection
 #ifdef DEBUG
         char filename_frmt [15];
         sprintf(filename_frmt, "image_%d.png", i);  //filepath with frame info
-        cv::imwrite(filename_frmt, converted_matrix);
-
+        cv::imwrite(filename_frmt, vram_matrix);
 #endif
 
     }
@@ -320,6 +338,8 @@ int detect_epileptic_image_opengl(std::vector<GLuint> textures) {
     int frameCount = 0;
     bool not_end_of_buffer = true;
 
+    return 0;
+
     /* Main loop */
     while (not_end_of_buffer) {
         frameCount++;
@@ -330,7 +350,7 @@ int detect_epileptic_image_opengl(std::vector<GLuint> textures) {
         }
 
         // set frame to be the next frame in the buffer
-        frame = frames[frameCount];
+        //frame = frames[frameCount];
 
         /* Adjust resloution of video using bicubic interpolation*/
         /* Aspect ratio is kept, letterboxing or cropping used */
