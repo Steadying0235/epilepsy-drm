@@ -133,3 +133,4 @@ Mat resizeVideo(Mat frame, int targetWidth, int targetHeight, bool crop, bool le
 
     return resizedFrame;
 }
+

@@ -18,6 +18,11 @@ option(READ_X11 "Read_X11" OFF)
 option(BASELINE "Baseline" ON)
 option(ADAPTIVE "Adaptive" OFF)
 
+# Set debug option
+option(DEBUG "Debug" ON)
+
+
+
 # set the detection method to baseline or adaptive via compiler option
 if(BASELINE)
     add_definitions(-DBASELINE)
@@ -26,6 +31,9 @@ if(ADAPTIVE)
     add_definitions(-DADAPTIVE)
 endif()
 
+if(DEBUG)
+    add_definitions(-DDEBUG)
+endif()
 # Set the read method based on the compiler option
 if(READ_LIBDRM)
     add_definitions(-DREAD_LIBDRM)
@@ -34,8 +42,8 @@ if(READ_X11)
     add_definitions(-DREAD_X11)
 endif()
 
-add_executable(userspace main_loop.cpp read_image_X11.cpp detect_image.cpp utils.cpp read_image_libdrm.cpp
-        read_image_libdrm.cpp)
+add_executable(userspace main_loop.cpp read_image_X11.cpp read_image_libdrm.cpp
+        read_image_libdrm.cpp detect_image.cpp utils.cpp)
 
 # Add your executable
 
@@ -43,22 +51,17 @@ add_executable(userspace main_loop.cpp read_image_X11.cpp detect_image.cpp utils
 # include_directories(${OpenCV_INCLUDE_DIRS})
 # Include DRM and OpenCV directores
 include_directories(${OpenCV_INCLUDE_DIRS})
+
 include_directories(/usr/include/drm)
 
 # Find the necessary libraries
 find_package(X11 REQUIRED)
 
-# Find EGL library
-#find_library(EGL_LIBRARY NAMES EGL PATHS /usr/lib /usr/lib64 /usr/lib/x86_64-linux-gnu)
-#find_package(EGL REQUIRED)
-#target_link_libraries(userspace EGL)
-#target_link_libraries(userspace ${EGL_KHR_LIBRARY})
-
 # Find EGL and EGL KHR headers
 find_path(EGL_INCLUDE_DIR EGL/egl.h PATH_SUFFIXES EGL)
 find_path(EGL_KHR_INCLUDE_DIR EGL/eglext.h PATH_SUFFIXES EGL)
 # Find EGL library
-find_library(EGL_LIBRARY NAMES EGL)
+find_library(EGL_LIBRARY NAMES EGL PATHS /usr/lib/x86_64-linux-gnu/)
 
 # If you need to find KHR extensions library (if separate)
 # find_library(EGL_KHR_LIBRARY NAMES EGL_KHR)
@@ -71,7 +74,6 @@ target_link_libraries(userspace ${EGL_LIBRARY} ${EGL_KHR_LIBRARY})
 
 # DEBUG: print out opencv libraries linked:
 cmake_print_variables(${OpenCV_LIBS})
-
 target_link_libraries(userspace ${OpenCV_LIBS})
 
 # Link against libX11 and libEGL
@@ -89,6 +91,10 @@ target_link_libraries(userspace png)
 # Link OpenGL
 target_link_libraries(userspace GL)
 
+# Link OpenCL
+find_package(OpenCL REQUIRED)
+target_link_libraries(userspace OpenCL::OpenCL)
+
 # Link libdrm and libgbm
 target_link_libraries(userspace drm gbm)
 
@@ -97,6 +103,6 @@ configure_file(support/inverseGammaLUT.bin ${CMAKE_CURRENT_BINARY_DIR}/inverseGa
 
 
 # Link against your custom compiled OpenCV libraries
-#link_directories(${OpenCV_DIR}/lib)
+link_directories(${OpenCV_DIR}/lib)
 
 

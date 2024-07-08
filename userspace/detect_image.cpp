@@ -8,12 +8,23 @@
 #include <array>
 #include <opencv2/opencv.hpp>
 #include <opencv2/core/hal/intrin.hpp>
+#include <opencv2/core/opengl.hpp>
+#include <opencv2/core/ocl.hpp>
+#include <opencv2/core/opencl/ocl_defs.hpp>
+#include <CL/cl.h>
 
 #include <chrono>
 #include <X11/Xlib.h>
 #include <fstream>
+#include <GL/gl.h>
+#include <GL/glext.h>
+#include <GLES2/gl2.h>
+#include <GLES2/gl2ext.h>
 
 #include "utils.h"
+
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
 
 using namespace std;
 using namespace std::chrono;
@@ -226,48 +237,59 @@ void* checkLumColThresh(void* arg) {
     return nullptr;
 }
 
-/* ./baseline -f filename [-letterbox -crop] */
-/* ./adaptive -f filename [-letterbox -crop] [-h xx -w xx -size xx -d xx] */
-// TODO: batch process
-int detect_epileptic_image(std::vector<std::vector<unsigned int>> images) {
 
-    /* Parse command line arguments */
-    int screenSize, viewingDistance;
+// Function to convert GLuint texture to OpenCV Mat
+cv::Mat textureToMat(GLuint textureId, int width, int height) {
+    // Bind the texture
+    glBindTexture(GL_TEXTURE_2D, textureId);
+    GLenum error = glGetError();
+    if (error) {
+        cout << "OpenGL Error binding texture" << endl;
+        return cv::Mat();
+    }
+
+
+    // Allocate memory for the texture data
+    cv::Mat image(height, width, CV_8UC4); // Assuming RGBA texture format
+
+    // Bind the texture buffer and map it to a pointer
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0); // Ensure no PBO is bound
+    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, image.data);
+
+    // Unbind texture
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    return image;
+
+}
+
+// Function to convert GL texture that keeps everything in VRAM
+cv::UMat textureToVRAMMat(GLuint textureId, int width, int height) {
+
+    cv::UMat uMatTexture(height, width, CV_8UC4);
+    glBindTexture(GL_TEXTURE_2D, textureId);
+    glGetTexImage(GL_TEXTURE_2D, 0, GL_BGRA, GL_UNSIGNED_BYTE, uMatTexture.getMat(cv::ACCESS_WRITE).data);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    return uMatTexture;
+
+}
+
+
+int detect_epileptic_image_opengl(std::vector<GLuint> textures) {
+
+    // given an array of textures, convert to Mats and then run detection code
+
 
 #ifdef BASELINE
-    /* Parse resolution, screen size and viewing distance */
-    cout << "Using baseline mode" << endl;
-    resolution_h = 540;
-    resolution_w = 960;
-
-    const int rows = 540; // Example rows and cols
-    const int cols = 960;
-
-    // Create a file stream for writing
-    ofstream outFile("output.txt");
-
-    // Check if the file stream is open
-    if (!outFile.is_open()) {
-        cout << "Failed to open output file." << endl;
-        return 1;
-    }
-
-    // Write the unsigned int* array to the file
-    for (int i = 0; i < rows * cols; ++i) {
-        outFile << images[1][i] << " ";
-
-        // Optionally, add newline after every 'cols' elements
-        if ((i + 1) % cols == 0) {
-            outFile << endl;
-        }
-    }
-
-    cout << "Wrote to output.txt" << endl;
 
     // screenSize = 15;
     // viewingDistance = 23;
     const int minSafeArea = 21824; // 341*256*0.25
 #endif
+
+    resolution_h = 1080;
+    resolution_w = 1920;
 
     /* Prepare inverse gamma lookup table */
     gammaLUT = readBinaryFile("inverseGammaLUT.bin");
@@ -275,52 +297,25 @@ int detect_epileptic_image(std::vector<std::vector<unsigned int>> images) {
     bool useLetterbox = false, useCrop = false;
     auto start = high_resolution_clock::now();
 
-    std::vector<cv::Mat> frames;
+    std::vector<cv::UMat> frames;
+    for (int i=0;i<textures.size();i++) {
 
-    for (int i=0;i<15;i++) {
+        cout << "Importing texture " << i << " to a Mat" << endl;
+        // Software method: SLOW!
+//        cv::Mat converted_matrix = textureToMat(textures[i], 1920, 1080);
+//        frames.push_back(converted_matrix);
 
-        // Example unsigned int* array (replace with your actual data)
-        std::vector<unsigned int> myUnsignedIntArray = images[i];
+        // SoftHardware method: Umat is potentially hardware accelerated :)
+            cv::UMat vram_matrix;
+            vram_matrix = textureToVRAMMat(textures[i], 1920, 1080);
+            frames.push_back(vram_matrix);
 
-        // Calculate the number of pixels
-        int numPixels = myUnsignedIntArray.size();
-
-        // Determine the number of channels (assuming RGB here)
-        int numChannels = 3;  // RGB has 3 channels
-
-        // Create a Mat object of appropriate size and type
-        cv::Mat image(rows, cols, CV_8UC3);  // CV_8UC3 for 8-bit unsigned integer channels (RGB)
-
-        int pixelIndex = 0;
-        for (int row = 0; row < rows; ++row) {
-            for (int col = 0; col < cols; ++col) {
-                if (pixelIndex < numPixels) {
-                    unsigned int pixelValue = myUnsignedIntArray[pixelIndex];
-                    uchar blue = pixelValue & 0xFF;
-                    uchar green = (pixelValue >> 8) & 0xFF;
-                    uchar red = (pixelValue >> 16) & 0xFF;
-
-                    // Set pixel value in the Mat
-                    image.at<cv::Vec3b>(row, col) = cv::Vec3b(blue, green, red);
-
-                    pixelIndex++;
-                } else {
-                    // Handle case where numPixels is smaller than rows * cols
-                    // This is optional depending on your logic
-                    break;
-                }
-            }
-        }
-
-
-        // add processed mat to vector
-        frames.push_back(image);
-
-        // Debug: dump feed to files to confirm integrity
-        char filename_fstring [15];
-        sprintf(filename_fstring, "test_%d.png", i);
-        // Display the image (optional)
-        cv::imwrite(filename_fstring, image);
+        // DEBUG: convert matricies to png for texture inspection
+#ifdef DEBUG
+        char filename_frmt [15];
+        sprintf(filename_frmt, "image_%d.png", i);  //filepath with frame info
+        cv::imwrite(filename_frmt, vram_matrix);
+#endif
 
     }
 
@@ -330,9 +325,6 @@ int detect_epileptic_image(std::vector<std::vector<unsigned int>> images) {
 
     /* get FPS */
     int fps = 30;
-
-
-    //const int fps = cap.get(CAP_PROP_FPS);
 
     int freqLum = 0, freqCol = 0;
 
@@ -344,8 +336,9 @@ int detect_epileptic_image(std::vector<std::vector<unsigned int>> images) {
     int indexArray[NTHREADS];
 
     int frameCount = 0;
-
     bool not_end_of_buffer = true;
+
+    return 0;
 
     /* Main loop */
     while (not_end_of_buffer) {
@@ -357,7 +350,7 @@ int detect_epileptic_image(std::vector<std::vector<unsigned int>> images) {
         }
 
         // set frame to be the next frame in the buffer
-        frame = frames[frameCount];
+        //frame = frames[frameCount];
 
         /* Adjust resloution of video using bicubic interpolation*/
         /* Aspect ratio is kept, letterboxing or cropping used */

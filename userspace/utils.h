@@ -28,4 +28,7 @@ Mat addLetterbox(const Mat& inputImage, int targetWidth, int targetHeight);
 
 Mat resizeVideo(const Mat frame, int targetWidth, int targetHeight, bool crop, bool letterbox);
 
+UMat resizeVideo(UMat frame, int targetWidth, int targetHeight, bool crop, bool letterbox);
+
+
 #endif
