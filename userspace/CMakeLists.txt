@@ -21,6 +21,9 @@ option(ADAPTIVE "Adaptive" OFF)
 # Set debug option
 option(DEBUG "Debug" ON)
 
+# Set option to debug libdrm
+option(DEBUG_LIBDRM "Debug libdrm read" OFF)
+
 
 
 # set the detection method to baseline or adaptive via compiler option
@@ -40,6 +43,10 @@ if(READ_LIBDRM)
 endif()
 if(READ_X11)
     add_definitions(-DREAD_X11)
+endif()
+
+if (DEBUG_LIBDRM)
+    add_definitions(-DDEBUG_LIBDRM)
 endif()
 
 add_executable(userspace main_loop.cpp read_image_X11.cpp read_image_libdrm.cpp

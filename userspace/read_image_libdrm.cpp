@@ -1,4 +1,5 @@
 #include "read_image_libdrm.h"
+#include <chrono>
 
 // debug texture exporter
 #ifdef DEBUG_LIBDRM
@@ -17,26 +18,26 @@ using namespace std;
 
 
 void enumerateModeResources(int fd, const drmModeResPtr res) {
-    MSG("\tcount_fbs = %d", res->count_fbs);
-    for (int i = 0; i < res->count_fbs; ++i)
-        MSG("\t\t%d: 0x%x", i, res->fbs[i]);
+//    MSG("\tcount_fbs = %d", res->count_fbs);
+//    for (int i = 0; i < res->count_fbs; ++i)
+//        MSG("\t\t%d: 0x%x", i, res->fbs[i]);
 
-    MSG("\tcount_crtcs = %d", res->count_crtcs);
+//    MSG("\tcount_crtcs = %d", res->count_crtcs);
     for (int i = 0; i < res->count_crtcs; ++i) {
-        MSG("\t\t%d: 0x%x", i, res->crtcs[i]);
+//        MSG("\t\t%d: 0x%x", i, res->crtcs[i]);
         drmModeCrtcPtr crtc = drmModeGetCrtc(fd, res->crtcs[i]);
         if (crtc) {
-            MSG("\t\t\tbuffer_id = 0x%x gamma_size = %d", crtc->buffer_id, crtc->gamma_size);
-            MSG("\t\t\t(%u %u %u %u) %d",
-                crtc->x, crtc->y, crtc->width, crtc->height, crtc->mode_valid);
-            MSG("\t\t\tmode.name = %s", crtc->mode.name);
+//            MSG("\t\t\tbuffer_id = 0x%x gamma_size = %d", crtc->buffer_id, crtc->gamma_size);
+//            MSG("\t\t\t(%u %u %u %u) %d",
+//                crtc->x, crtc->y, crtc->width, crtc->height, crtc->mode_valid);
+//            MSG("\t\t\tmode.name = %s", crtc->mode.name);
             drmModeFreeCrtc(crtc);
         }
     }
 
-    MSG("\tcount_connectors = %d", res->count_connectors);
+//    MSG("\tcount_connectors = %d", res->count_connectors);
     for (int i = 0; i < res->count_connectors; ++i) {
-        MSG("\t\t%d: 0x%x", i, res->connectors[i]);
+//        MSG("\t\t%d: 0x%x", i, res->connectors[i]);
         drmModeConnectorPtr conn = drmModeGetConnectorCurrent(fd, res->connectors[i]);
         if (conn) {
             drmModeFreeConnector(conn);
@@ -110,13 +111,13 @@ uint32_t get_framebuffer_id() {
 
     uint32_t highest_resolution_fb = 0x00;
     uint32_t highest_resolution_width = 0;
-    MSG("count_fbs = %d", count_fbs);
+//    MSG("count_fbs = %d", count_fbs);
     for (int i = 0; i < count_fbs; ++i) {
-        MSG("Framebuffer id: %#x", fbs[i]);
+//        MSG("Framebuffer id: %#x", fbs[i]);
         // Get a Framebuffer pointer
         drmModeFBPtr fb = drmModeGetFB(fd, fbs[i]);
 
-        MSG("Framebuffer %d, Width: %d", i, fb->width);
+//        MSG("Framebuffer %d, Width: %d", i, fb->width);
 
         if (fb->width > highest_resolution_width) {
             highest_resolution_fb = fbs[i];
@@ -126,7 +127,7 @@ uint32_t get_framebuffer_id() {
         drmModeFreeFB(fb);
     }
 
-    MSG("%#x is the highest resolution framebuffer", highest_resolution_fb);
+//    MSG("%#x is the highest resolution framebuffer", highest_resolution_fb);
     close(fd);
 
     return highest_resolution_fb;
@@ -166,12 +167,12 @@ vector<GLuint> runEGL(const DmaBuf *img, int num_frames) {
     EGLDisplay edisp = eglGetDisplay(xdisp);
     EGLint ver_min, ver_maj;
     eglInitialize(edisp, &ver_maj, &ver_min);
-    MSG("EGL: version %d.%d", ver_maj, ver_min);
-    MSG("EGL: EGL_VERSION: '%s'", eglQueryString(edisp, EGL_VERSION));
-    MSG("EGL: EGL_VENDOR: '%s'", eglQueryString(edisp, EGL_VENDOR));
-    MSG("EGL: EGL_CLIENT_APIS: '%s'", eglQueryString(edisp, EGL_CLIENT_APIS));
-    MSG("EGL: client EGL_EXTENSIONS: '%s'", eglQueryString(EGL_NO_DISPLAY, EGL_EXTENSIONS));
-    MSG("EGL: EGL_EXTENSIONS: '%s'", eglQueryString(edisp, EGL_EXTENSIONS));
+//    MSG("EGL: version %d.%d", ver_maj, ver_min);
+//    MSG("EGL: EGL_VERSION: '%s'", eglQueryString(edisp, EGL_VERSION));
+//    MSG("EGL: EGL_VENDOR: '%s'", eglQueryString(edisp, EGL_VENDOR));
+//    MSG("EGL: EGL_CLIENT_APIS: '%s'", eglQueryString(edisp, EGL_CLIENT_APIS));
+//    MSG("EGL: client EGL_EXTENSIONS: '%s'", eglQueryString(EGL_NO_DISPLAY, EGL_EXTENSIONS));
+//    MSG("EGL: EGL_EXTENSIONS: '%s'", eglQueryString(edisp, EGL_EXTENSIONS));
 
     static const EGLint econfattrs[] = {
             EGL_BUFFER_SIZE, 32,
@@ -239,7 +240,7 @@ vector<GLuint> runEGL(const DmaBuf *img, int num_frames) {
     ASSERT(eglMakeCurrent(edisp, esurf,
                           esurf, ectx));
 
-    MSG("%s", glGetString(GL_EXTENSIONS));
+//    MSG("%s", glGetString(GL_EXTENSIONS));
 
     // FIXME check for EGL_EXT_image_dma_buf_import
     EGLAttrib eimg_attrs[] = {
@@ -265,19 +266,67 @@ vector<GLuint> runEGL(const DmaBuf *img, int num_frames) {
     glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, eimg);
     ASSERT(glGetError() == 0);
 
-
-
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 
 
-
+    // frame timing
+//    if (eglSwapInterval(edisp, 1) != EGL_TRUE) {
+//        cerr << "Issue with setting vsync on display" << endl;
+//    }
 
     for (int i = 0; i < num_frames; ++i) {
+        glFinish();
+
+        auto start = std::chrono::high_resolution_clock::now();
+
+
+        // as it stands, this code currently references rather than copies the EGL image
+//        GLuint tex;
+//        glGenTextures(1, &tex);
+//        glBindTexture(GL_TEXTURE_2D, tex);
+//        glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, eimg);
+//        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+//        frame_textures[i] = tex;
+//        cout << "Grab Frame " << i << endl;
+//
+
+        // this is an attempt to copy the image VRAM-VRAM rather than just make a reference
+        // Think this is pretty good, basically just renders the egl image to a rednerbuffer which we create a texture out of
         GLuint tex;
         glGenTextures(1, &tex);
         glBindTexture(GL_TEXTURE_2D, tex);
-        glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, eimg);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+// Create a temporary texture and bind the EGL image to it
+        GLuint tempTex;
+        glGenTextures(1, &tempTex);
+        glBindTexture(GL_TEXTURE_2D, tempTex);
+        glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, eimg);
+// Create a framebuffer and attach the temporary texture to it
+        GLuint fbo;
+        glGenFramebuffers(1, &fbo);
+        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tempTex, 0);
+// Check if framebuffer is complete
+//        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE) {
+            // Get the dimensions of the texture
+            GLint width, height;
+            glBindTexture(GL_TEXTURE_2D, tempTex);
+            glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &width);
+            glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &height);
+            // Allocate memory to read the pixel data
+            GLubyte *pixels = new GLubyte[width * height * 4]; // Assuming RGBA format
+            glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+            // Bind the new texture and upload the pixel data
+            glBindTexture(GL_TEXTURE_2D, tex);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+
+            delete[] pixels;
+//        }
+// Cleanup & vector add
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteFramebuffers(1, &fbo);
+        glDeleteTextures(1, &tempTex);
         frame_textures[i] = tex;
 
         // if in a debug build, dumb copy framebuffer to cpu to debug the texture
@@ -299,6 +348,27 @@ vector<GLuint> runEGL(const DmaBuf *img, int num_frames) {
         // Free allocated memory
             free(data);
         #endif
+
+//        if (!eglSwapBuffers(edisp, esurf)) {
+//            cout << "Error with swapping" << endl;
+//        }
+
+        glFinish();
+
+        // frame timing after image is grabbed
+        auto stop = std::chrono::high_resolution_clock::now();
+
+        auto frametime = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+
+        cout << "frametime: " << frametime.count() << " microseconds" << endl;
+
+        //
+        long time_to_next_frame = ((1000 / 30) * 1000) - frametime.count();
+
+//        if (time_to_next_frame > 0 ) {
+//            cout << "sleep " << time_to_next_frame << endl;
+//            std::this_thread::sleep_for(std::chrono::microseconds(time_to_next_frame));
+//        }
 
     }
 
@@ -327,10 +397,10 @@ vector<GLuint> runEGL(const DmaBuf *img, int num_frames) {
 std::vector<GLuint> read_image_libdrm(int num_frames) {
 
     uint32_t fb_id = get_framebuffer_id();
-    MSG("Framebuffer id grabbed: %x", fb_id);
+//    MSG("Framebuffer id grabbed: %x", fb_id);
     const char *card = "/dev/dri/card0";
 
-    MSG("Opening card %s", card);
+//    MSG("Opening card %s", card);
     const int drmfd = open(card, O_RDONLY);
     if (drmfd < 0) {
         perror("Cannot open card");
@@ -342,8 +412,8 @@ std::vector<GLuint> read_image_libdrm(int num_frames) {
     if (fb) {
 
 
-        MSG("fb_id=%#x width=%u height=%u pitch=%u bpp=%u depth=%u handle=%#x",
-            fb_id, fb->width, fb->height, fb->pitch, fb->bpp, fb->depth, fb->handle);
+//        MSG("fb_id=%#x width=%u height=%u pitch=%u bpp=%u depth=%u handle=%#x",
+//            fb_id, fb->width, fb->height, fb->pitch, fb->bpp, fb->depth, fb->handle);
 
         if (fb->handle) {
             int texture_dmabuf_fd;
@@ -356,7 +426,7 @@ std::vector<GLuint> read_image_libdrm(int num_frames) {
             img.fourcc = DRM_FORMAT_XRGB8888; // FIXME
 
             const int ret = drmPrimeHandleToFD(drmfd, fb->handle, 0, &dma_buf_fd);
-            MSG("drmPrimeHandleToFD = %d, fd = %d", ret, dma_buf_fd);
+//            MSG("drmPrimeHandleToFD = %d, fd = %d", ret, dma_buf_fd);
             img.fd = dma_buf_fd;
 
             vector<GLuint> texture = runEGL(&img, num_frames);

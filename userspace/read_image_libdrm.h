@@ -24,13 +24,15 @@
 #include <EGL/eglext.h>
 #define GL_GLEXT_PROTOTYPES
 #include <GL/gl.h>
+#include <GL/glx.h>
+#include <GL/glu.h>
 #include <GL/glext.h>
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
 #include <gbm.h>
 #include <cstring>
-
-#import <vector>
+#include <thread>
+#include <vector>
 
 #pragma once
 

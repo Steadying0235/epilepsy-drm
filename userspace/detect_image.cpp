@@ -24,7 +24,10 @@
 #include "utils.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
+
+#ifndef DEBUG_LIBDRM
 #include "stb_image_write.h"
+#endif
 
 using namespace std;
 using namespace std::chrono;
@@ -300,7 +303,7 @@ int detect_epileptic_image_opengl(std::vector<GLuint> textures) {
     std::vector<cv::UMat> frames;
     for (int i=0;i<textures.size();i++) {
 
-        cout << "Importing texture " << i << " to a Mat" << endl;
+//        cout << "Importing texture " << i << " to a Mat" << endl;
         // Software method: SLOW!
 //        cv::Mat converted_matrix = textureToMat(textures[i], 1920, 1080);
 //        frames.push_back(converted_matrix);
